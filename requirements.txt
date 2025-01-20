@@ -1,0 +1,7 @@
+gradio>=4.16.0
+opencv-python-headless>=4.8.1.78
+numpy>=1.26.3
+torch==1.13.1
+torchvision>=0.16.2
+ffmpeg-python>=0.2.0
+transformers>=4.48.0 
