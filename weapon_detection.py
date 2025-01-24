@@ -20,6 +20,7 @@ import tempfile
 import subprocess
 import shutil
 import traceback
+import psutil
 
 # Carregar variáveis de ambiente
 load_dotenv()
@@ -650,6 +651,7 @@ class WeaponDetectorSingleton:
                 
                 for detection in frame_detections:
                     box = detection["box"]
+                    score = detection["score"]
                     x1, y1, x2, y2 = map(int, box)
                     w = x2 - x1
                     h = y2 - y1
@@ -657,14 +659,19 @@ class WeaponDetectorSingleton:
                     # Comando para o retângulo vermelho
                     rect_cmd = f"drawbox=x={x1}:y={y1}:w={w}:h={h}:color=red:thickness=3"
                     
-                    # Texto "RISK"
+                    # Texto "RISK {score}%"
+                    score_percent = round(score * 100, 1)
+                    text = f"RISK {score_percent}%"
                     text_y = max(30, y1 - 10)  # Evitar texto fora da tela
                     
-                    # Fundo vermelho para o texto
-                    text_bg = f"drawbox=x={x1}:y={text_y-20}:w=60:h=20:color=red:thickness=fill"
+                    # Calcular largura do texto (aproximada)
+                    text_width = len(text) * 10  # Aproximadamente 10 pixels por caractere
                     
-                    # Texto em branco
-                    text_cmd = f"drawtext=text=RISK:x={x1+5}:y={text_y-15}:fontsize=16:fontcolor=white:shadowcolor=black:shadowx=1:shadowy=1"
+                    # Fundo vermelho para o texto
+                    text_bg = f"drawbox=x={x1}:y={text_y-20}:w={text_width}:h=20:color=red:thickness=fill"
+                    
+                    # Texto em branco com score
+                    text_cmd = f"drawtext=text='{text}':x={x1+5}:y={text_y-15}:fontsize=16:fontcolor=white:shadowcolor=black:shadowx=1:shadowy=1"
                     
                     # Adicionar enable condition para o frame específico
                     for cmd in [rect_cmd, text_bg, text_cmd]:
@@ -730,6 +737,168 @@ class WeaponDetectorSingleton:
             }
             for start, end in ranges
         ]
+
+    def process_video(self, video_path: str, fps: int = None, threshold: float = 0.3) -> Tuple[str, Dict]:
+        """Process video and return path to analyzed video and technical details."""
+        try:
+            start_time = time.time()
+            metrics = {
+                "performance": {
+                    "total_time": 0,
+                    "fps_processing": 0,
+                    "frames_processed": 0,
+                    "avg_detection_time": 0,
+                    "avg_preprocessing_time": 0
+                },
+                "detection": {
+                    "total_detections": 0,
+                    "detections_by_scale": {},
+                    "confidence_distribution": {
+                        "0.3-0.4": 0, "0.4-0.5": 0,
+                        "0.5-0.6": 0, "0.6-0.7": 0,
+                        "0.7-0.8": 0, "0.8-0.9": 0,
+                        "0.9-1.0": 0
+                    },
+                    "detection_sizes": {
+                        "small": 0,  # < 32x32
+                        "medium": 0, # 32x32 - 96x96
+                        "large": 0   # > 96x96
+                    },
+                    "false_positives_filtered": 0
+                },
+                "preprocessing": {
+                    "avg_image_size": {"width": 0, "height": 0},
+                    "resize_stats": {"min": 0, "max": 0, "avg": 0},
+                    "brightness_stats": {"min": 0, "max": 0, "avg": 0},
+                    "contrast_stats": {"min": 0, "max": 0, "avg": 0}
+                },
+                "memory": {
+                    "peak_memory_mb": 0,
+                    "avg_memory_mb": 0
+                },
+                "technical": {
+                    "model": "owlv2-base-patch16",
+                    "input_size": "1280x1280",
+                    "scales": [0.85, 1.0, 1.15],
+                    "nms_threshold": 0.4,
+                    "preprocessing_steps": [
+                        "bilateral_filter(d=7,σ=50)",
+                        "clahe(limit=2.0,grid=16x16)",
+                        "adaptive_sharpening",
+                        "gamma_correction(1.1)",
+                        "saturation_boost(1.2)"
+                    ]
+                }
+            }
+            
+            # Processar frames
+            total_preprocessing_time = 0
+            total_detection_time = 0
+            memory_samples = []
+            all_detections = []
+            
+            frames = self.extract_frames(video_path, fps)
+            metrics["performance"]["frames_processed"] = len(frames)
+            
+            for timestamp, frame in frames:
+                frame_start = time.time()
+                
+                # Métricas de pré-processamento
+                preprocess_start = time.time()
+                pil_image = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
+                orig_size = pil_image.size
+                metrics["preprocessing"]["avg_image_size"]["width"] += orig_size[0]
+                metrics["preprocessing"]["avg_image_size"]["height"] += orig_size[1]
+                
+                # Análise de brilho e contraste
+                img_array = np.array(pil_image)
+                brightness = np.mean(img_array)
+                contrast = np.std(img_array)
+                
+                metrics["preprocessing"]["brightness_stats"]["min"] = min(metrics["preprocessing"]["brightness_stats"]["min"], brightness) if metrics["preprocessing"]["brightness_stats"]["min"] else brightness
+                metrics["preprocessing"]["brightness_stats"]["max"] = max(metrics["preprocessing"]["brightness_stats"]["max"], brightness)
+                metrics["preprocessing"]["brightness_stats"]["avg"] += brightness
+                
+                metrics["preprocessing"]["contrast_stats"]["min"] = min(metrics["preprocessing"]["contrast_stats"]["min"], contrast) if metrics["preprocessing"]["contrast_stats"]["min"] else contrast
+                metrics["preprocessing"]["contrast_stats"]["max"] = max(metrics["preprocessing"]["contrast_stats"]["max"], contrast)
+                metrics["preprocessing"]["contrast_stats"]["avg"] += contrast
+                
+                processed_image = self._preprocess_image(pil_image)
+                preprocess_time = time.time() - preprocess_start
+                total_preprocessing_time += preprocess_time
+                
+                # Métricas de detecção
+                detect_start = time.time()
+                frame_detections = self.detect_objects(processed_image, threshold)
+                detect_time = time.time() - detect_start
+                total_detection_time += detect_time
+                
+                # Análise das detecções
+                metrics["detection"]["total_detections"] += len(frame_detections)
+                for det in frame_detections:
+                    # Distribuição de confiança
+                    conf = det["score"]
+                    for range_key in metrics["detection"]["confidence_distribution"].keys():
+                        min_conf, max_conf = map(float, range_key.split("-"))
+                        if min_conf <= conf < max_conf:
+                            metrics["detection"]["confidence_distribution"][range_key] += 1
+                    
+                    # Tamanho das detecções
+                    box = det["box"]
+                    width = box[2] - box[0]
+                    height = box[3] - box[1]
+                    area = width * height
+                    if area < 32*32:
+                        metrics["detection"]["detection_sizes"]["small"] += 1
+                    elif area < 96*96:
+                        metrics["detection"]["detection_sizes"]["medium"] += 1
+                    else:
+                        metrics["detection"]["detection_sizes"]["large"] += 1
+                    
+                    # Adicionar timestamp à detecção
+                    det["timestamp"] = timestamp
+                    all_detections.append(det)
+                
+                # Métricas de memória
+                memory_mb = psutil.Process().memory_info().rss / 1024 / 1024
+                memory_samples.append(memory_mb)
+            
+            # Calcular médias e estatísticas finais
+            total_time = time.time() - start_time
+            num_frames = len(frames)
+            
+            metrics["performance"].update({
+                "total_time": total_time,
+                "fps_processing": num_frames / total_time,
+                "avg_detection_time": total_detection_time / num_frames,
+                "avg_preprocessing_time": total_preprocessing_time / num_frames
+            })
+            
+            metrics["preprocessing"]["avg_image_size"].update({
+                "width": metrics["preprocessing"]["avg_image_size"]["width"] / num_frames,
+                "height": metrics["preprocessing"]["avg_image_size"]["height"] / num_frames
+            })
+            
+            metrics["preprocessing"]["brightness_stats"]["avg"] /= num_frames
+            metrics["preprocessing"]["contrast_stats"]["avg"] /= num_frames
+            
+            metrics["memory"].update({
+                "peak_memory_mb": max(memory_samples),
+                "avg_memory_mb": sum(memory_samples) / len(memory_samples)
+            })
+            
+            # Adicionar detecções às métricas
+            metrics["detections"] = all_detections
+            
+            # Gerar vídeo com as detecções
+            output_path = self.generate_output_video(video_path, all_detections, fps=fps)
+            
+            return output_path, metrics
+            
+        except Exception as e:
+            print(f"Erro ao processar vídeo: {str(e)}")
+            traceback.print_exc()
+            return video_path, {}
 
 class WeaponDetector:
     def __init__(self):
@@ -812,3 +981,7 @@ class WeaponDetector:
     def _create_time_ranges(self, timestamps: List[float]) -> List[Dict]:
         """Create time ranges with optimized gap threshold."""
         return self._detector._create_time_ranges(timestamps)
+    
+    def process_video(self, video_path: str, fps: int = None, threshold: float = 0.3) -> Tuple[str, Dict]:
+        """Process video and return path to analyzed video and technical details."""
+        return self._detector.process_video(video_path, fps, threshold)

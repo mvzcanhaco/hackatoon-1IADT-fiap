@@ -1,71 +1,138 @@
-# Processador de Vídeo em Tempo Real
+# 🚨 Sistema de Detecção de Riscos em Vídeos
 
-Esta aplicação Streamlit permite processar vídeos em tempo real, seja através de upload de arquivo ou webcam.
+Sistema inteligente para detecção de objetos perigosos em vídeos usando IA, desenvolvido para aumentar a segurança em ambientes monitorados.
 
-## Funcionalidades
+## 🎯 Funcionalidades
 
-- Upload de vídeos (MP4, MOV, AVI)
-- Captura e processamento de vídeo via webcam
-- Processamento em tempo real (conversão para escala de cinza)
-- Interface intuitiva com visualização lado a lado (original vs processado)
+- **Detecção em Tempo Real**: Análise frame a frame de vídeos para identificação de objetos perigosos
+- **Alta Precisão**: Utiliza o modelo OWL-ViT (patch16) para detecção precisa de objetos
+- **Visualização Clara**: Bounding boxes com scores de confiança em cada detecção
+- **Métricas Detalhadas**: Informações completas sobre performance e detecções
+- **Interface Web**: Interface amigável usando Gradio para upload e análise de vídeos
+- **API REST**: Endpoints para integração com outros sistemas
 
-## Requisitos
+## 🛠️ Tecnologias Utilizadas
 
-As dependências necessárias estão listadas no arquivo `requirements.txt`. Para instalá-las, execute:
+- Python 3.8+
+- PyTorch com MPS/CPU
+- OWL-ViT (Vision Transformer)
+- OpenCV para processamento de vídeo
+- FFmpeg para geração de vídeo
+- Flask para API REST
+- Gradio para interface web
 
+## 📋 Pré-requisitos
+
+1. Python 3.8 ou superior
+2. FFmpeg instalado no sistema
+3. Pip (gerenciador de pacotes Python)
+4. Git
+
+## 🚀 Instalação
+
+1. Clone o repositório:
 ```bash
-pip install -r requirements.txt
-```
-
-## Executando Localmente
-
-1. Clone este repositório:
-```bash
-git clone [URL_DO_SEU_REPOSITORIO]
+git clone [URL_DO_REPOSITORIO]
 cd [NOME_DO_DIRETORIO]
 ```
 
-2. Instale as dependências:
+2. Crie um ambiente virtual:
+```bash
+python -m venv venv
+source venv/bin/activate  # Linux/Mac
+# ou
+.\venv\Scripts\activate  # Windows
+```
+
+3. Instale as dependências:
 ```bash
 pip install -r requirements.txt
 ```
 
-3. Execute a aplicação:
+4. Configure as variáveis de ambiente:
 ```bash
-streamlit run app.py
+cp .env.example .env
+# Edite o arquivo .env com suas configurações
 ```
 
-4. Acesse a aplicação em seu navegador (geralmente em http://localhost:8501)
+## 💻 Uso
 
-## Implantação no Hugging Face Spaces
-
-1. Crie um novo Space no Hugging Face:
-   - Acesse https://huggingface.co/spaces
-   - Clique em "Create new Space"
-   - Selecione "Streamlit" como SDK
-   - Escolha um nome para seu Space
-
-2. Configure seu repositório Git:
+### Interface Web
+1. Inicie o servidor:
 ```bash
-git init
-git add .
-git commit -m "Primeira versão"
-git branch -M main
-git remote add origin https://huggingface.co/spaces/[SEU_USUARIO]/[NOME_DO_SPACE]
-git push -u origin main
+python app.py
+```
+2. Acesse `http://localhost:7860` no navegador
+3. Faça upload do vídeo e ajuste os parâmetros
+4. Clique em "Analisar Vídeo"
+
+### API REST
+Endpoints disponíveis:
+- `POST /process_video`: Processa um vídeo
+- `GET /metrics`: Obtém métricas do último processamento
+
+Exemplo de uso com curl:
+```bash
+curl -X POST -F "video=@seu_video.mp4" http://localhost:5000/process_video
 ```
 
-## Estrutura do Projeto
+## 📊 Métricas e Parâmetros
 
-```
-.
-├── app.py              # Aplicação principal
-├── requirements.txt    # Dependências do projeto
-└── README.md          # Documentação
-```
+### Parâmetros Ajustáveis
+- **Threshold**: 0.1 a 1.0 (padrão: 0.4)
+- **FPS**: 1 a 30 (padrão: 2)
 
-## Notas Importantes
+### Métricas Disponíveis
+- Performance (tempo total, FPS, etc.)
+- Detecções (quantidade, tipos, confiança)
+- Pré-processamento (tamanho, brilho, contraste)
+- Uso de memória
 
-- A aplicação usa `opencv-python-headless` para compatibilidade com Hugging Face Spaces
-- O processamento de vídeo atual é um exemplo simples (escala de cinza)
-- Para adicionar mais funcionalidades de processamento, modifique a função `process_frame` em `app.py` 
+## 🔍 Detecções
+
+O sistema detecta:
+- Armas brancas (facas, lâminas, etc.)
+- Objetos pontiagudos
+- Armas de fogo
+- Outros objetos perigosos
+
+Cada detecção inclui:
+- Bounding box
+- Score de confiança
+- Timestamp
+- Tipo de objeto
+
+## 🤝 Contribuindo
+
+1. Fork o projeto
+2. Crie sua branch (`git checkout -b feature/AmazingFeature`)
+3. Commit suas mudanças (`git commit -m 'Add some AmazingFeature'`)
+4. Push para a branch (`git push origin feature/AmazingFeature`)
+5. Abra um Pull Request
+
+## 📝 Notas de Versão
+
+### v1.0.0
+- Detecção de objetos perigosos
+- Interface web Gradio
+- API REST
+- Métricas detalhadas
+- Suporte a MPS/CPU
+
+## ⚠️ Limitações Conhecidas
+
+- Processamento pode ser lento em CPUs menos potentes
+- Requer pelo menos 4GB de RAM
+- Alguns falsos positivos em condições de baixa luz
+- Vídeos muito longos podem consumir bastante memória
+
+## 📄 Licença
+
+Este projeto está sob a licença MIT. Veja o arquivo [LICENSE](LICENSE) para mais detalhes.
+
+## 📧 Contato
+
+Para questões e suporte: [SEU_EMAIL]
+
+---
+Desenvolvido com ❤️ para o Hackathon FIAP
