@@ -1,161 +1,119 @@
 import gradio as gr
-import cv2
-import numpy as np
 import tempfile
-import json
-import time
-from pathlib import Path
+import os
 from weapon_detection import WeaponDetector
-from PIL import Image
+import json
+from pathlib import Path
 
-# Inicializar o detector de armas uma vez
+# Inicializar detector
+print("Initializing weapon detector...")
 weapon_detector = WeaponDetector()
 
-def process_frame(frame):
-    """
-    Processa um frame do vídeo e retorna os dados de análise.
-    """
-    if frame is None:
-        return None
+def process_video(video_path, threshold=0.5, fps=2):
+    """Process video and return detections with analyzed video."""
+    if video_path is None:
+        return None, "No video uploaded", None
+    
+    try:
+        # Se o vídeo for um arquivo temporário do Gradio, ele será uma string
+        if isinstance(video_path, str):
+            video_file = video_path
+        else:
+            video_file = video_path.name
         
-    gray_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-    analysis = {
-        "timestamp": time.time(),
-        "mean_intensity": float(np.mean(gray_frame)),
-        "min_intensity": float(np.min(gray_frame)),
-        "max_intensity": float(np.max(gray_frame))
-    }
-    
-    # Detectar armas no frame
-    dangerous_objects = [
-        "knife", "machete", "sword", "dagger", "bayonet", "blade",
-        "combat knife", "hunting knife", "military knife", "tactical knife",
-        "kitchen knife", "butcher knife", "pocket knife", "utility knife",
-        "razor", "box cutter", "glass shard", "broken glass", "broken bottle",
-        "scissors", "sharp metal", "sharp object", "blade weapon",
-        "scalpel", "exacto knife", "craft knife", "paper cutter",
-        "ice pick", "awl", "needle", "screwdriver", "metal spike",
-        "sharp stick", "sharp pole", "pointed metal", "metal rod",
-        "saw blade", "circular saw", "chainsaw", "axe", "hatchet",
-        "cleaver", "metal file", "chisel", "wire cutter",
-        "sharpened object", "improvised blade", "makeshift weapon",
-        "concealed blade", "hidden blade", "modified tool"
-    ]
-    detections = weapon_detector.detect_objects(Image.fromarray(gray_frame), dangerous_objects)
-    
-    # Adicionar detecções à análise
-    analysis["weapon_detections"] = detections
-    
-    return analysis
-
-def process_video(video_input):
-    """
-    Processa o vídeo e retorna os resultados da análise.
-    Aceita tanto upload quanto gravação da webcam.
-    """
-    if video_input is None:
-        return "Nenhum vídeo fornecido.", None
+        # Processar vídeo
+        detections, summary, metrics = weapon_detector.analyze_video(
+            video_file,
+            threshold=threshold,
+            fps=fps
+        )
         
-    # Criar arquivo temporário se o input for um caminho
-    if isinstance(video_input, str):
-        video_path = video_input
-    else:
-        temp = tempfile.NamedTemporaryFile(delete=False, suffix='.mp4')
-        temp.write(video_input)
-        video_path = temp.name
+        # Formatar resultados de forma simples
+        if detections:
+            result_text = "RISCO DETECTADO!\n\n"
+            if summary.get("time_ranges"):
+                result_text += "Intervalos de Risco:\n"
+                for range_info in summary["time_ranges"]:
+                    result_text += f"• {range_info['start']:.1f}s até {range_info['end']:.1f}s\n"
+        else:
+            result_text = "✅ Nenhum risco detectado"
         
-    cap = cv2.VideoCapture(video_path)
-    results = []
-    detections_summary = []
-    detailed_detections = []
-    
-    while cap.isOpened():
-        ret, frame = cap.read()
-        if not ret:
-            break
+        # Calcular FPS efetivo com proteção contra divisão por zero
+        video_duration = metrics.get("video_duration", 0)
+        frames_analyzed = metrics.get("frames_analyzed", 0)
+        effective_fps = "N/A"
+        if video_duration > 0:
+            effective_fps = f"{frames_analyzed/video_duration:.1f}"
+        
+        # Expandir detalhes técnicos
+        technical_details = {
+            "status": summary["risk_status"],
+            "device_info": {
+                "type": metrics["device_type"],
+                "optimization": "CUDA enabled" if metrics["device_type"] == "cuda" else "CPU/MPS optimized"
+            },
+            "performance_metrics": {
+                "total_time": f"{metrics['total_time']:.2f}s",
+                "frame_extraction_time": f"{metrics['frame_extraction_time']:.2f}s",
+                "analysis_time": f"{metrics['analysis_time']:.2f}s",
+                "frames_analyzed": frames_analyzed,
+                "fps_target": fps,
+                "detection_threshold": threshold
+            },
+            "video_info": {
+                "duration": f"{video_duration:.2f}s",
+                "total_frames": frames_analyzed,
+                "effective_fps": effective_fps
+            },
+            "detection_details": {
+                "total_detections": len(detections),
+                "unique_timestamps": len(set(d["timestamp"] for d in detections)),
+                "detection_types": list(set(d["type"] for d in detections)),
+                "time_ranges": summary["time_ranges"]
+            }
+        }
+        
+        # Retornar vídeo analisado se disponível
+        output_video = summary.get("output_video")
+        if output_video and os.path.exists(output_video):
+            print(f"Returning analyzed video: {output_video}")
+            return output_video, result_text, json.dumps(technical_details, indent=2)
+        else:
+            print("No analyzed video available, returning original")
+            return video_file, result_text, json.dumps(technical_details, indent=2)
             
-        analysis = process_frame(frame)
-        if analysis:
-            results.append(analysis)
-            
-            # Adicionar detecções ao resumo e JSON detalhado
-            for detection in analysis["weapon_detections"]:
-                detections_summary.append(f"{detection['label']} com confiança de {detection['score']*100:.1f}%")
-                detailed_detections.append({
-                    "tipo": detection["label"],
-                    "confiança": detection["score"],
-                    "descrição": f"Uma {detection['label']} foi detectada na cena",
-                    "caixa": detection["box"]
-                })
-            
-    cap.release()
-    
-    if not results:
-        return "Erro ao processar o vídeo.", None
-        
-    # Calcular estatísticas gerais
-    mean_intensities = [r["mean_intensity"] for r in results]
-    stats = {
-        "média_intensidade_geral": float(np.mean(mean_intensities)),
-        "frames_analisados": len(results),
-        "duração_segundos": len(results) / 30.0,  # assumindo 30fps
-        "análise_por_frame": results
-    }
-    
-    # Formatar saída para melhor visualização
-    output_text = f"""
-    Estatísticas do Vídeo:
-    - Frames analisados: {stats['frames_analisados']}
-    - Duração aproximada: {stats['duração_segundos']:.2f} segundos
-    - Média de intensidade: {stats['média_intensidade_geral']:.2f}
-    - Detecções: {', '.join(detections_summary) if detections_summary else 'Nenhuma detecção'}
-    """
-    
-    detailed_output = {
-        "estatísticas": stats,
-        "detecções_detalhadas": detailed_detections
-    }
-    
-    return output_text, json.dumps(detailed_output, indent=2)
+    except Exception as e:
+        print(f"Error processing video: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return video_path, f"Error: {str(e)}", None
 
 # Interface Gradio
-with gr.Blocks(title="Processador de Vídeo com Análise") as demo:
-    gr.Markdown("# Processador de Vídeo com Análise")
+with gr.Blocks(title="Weapon Detection System", theme=gr.themes.Soft()) as demo:
+    gr.Markdown("""
+    # 🚨 Sistema de Detecção de Riscos
+    Faça upload de um vídeo para detectar objetos perigosos.
+    """)
     
     with gr.Row():
         with gr.Column():
-            gr.Markdown("### Entrada de Vídeo")
-            video_input = gr.Video(
-                label="Upload ou Gravação",
-                sources=["upload", "webcam"],
-                format="mp4"
-            )
+            input_video = gr.Video(label="Vídeo de Entrada")
+            with gr.Row():
+                threshold = gr.Slider(minimum=0.1, maximum=1.0, value=0.5, step=0.1, label="Limiar de Detecção")
+                fps = gr.Slider(minimum=1, maximum=30, value=2, step=1, label="Frames por Segundo")
+            submit_btn = gr.Button("Analisar Vídeo", variant="primary")
         
         with gr.Column():
-            gr.Markdown("### Resultados da Análise")
-            text_output = gr.Textbox(
-                label="Resumo",
-                lines=4,
-                interactive=False
-            )
-            json_output = gr.JSON(
-                label="Dados Detalhados"
-            )
+            output_video = gr.Video(label="Vídeo Analisado (com detecções)")
+            output_text = gr.Textbox(label="Resultado da Análise", lines=5)
+            json_output = gr.JSON(label="Detalhes Técnicos")
     
-    # Botão de processamento
-    process_btn = gr.Button("Processar Vídeo")
-    process_btn.click(
-        fn=process_video,
-        inputs=[video_input],
-        outputs=[text_output, json_output]
+    submit_btn.click(
+        process_video,
+        inputs=[input_video, threshold, fps],
+        outputs=[output_video, output_text, json_output]
     )
-    
-    gr.Markdown("""
-    ### Como Usar
-    1. Faça upload de um vídeo ou grave usando a webcam
-    2. Clique em "Processar Vídeo"
-    3. Veja os resultados da análise no lado direito
-    """)
 
+# Iniciar interface
 if __name__ == "__main__":
-    demo.launch() 
+    demo.launch(share=False)

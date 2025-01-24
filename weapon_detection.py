@@ -1,256 +1,714 @@
-import os
-import cv2
-import json
-import time
 import torch
+from transformers import OwlViTProcessor, OwlViTForObjectDetection
+from PIL import Image, ImageDraw, ImageFilter, ImageEnhance, ImageOps
 import numpy as np
-from PIL import Image
-from typing import List, Dict, Tuple
+import cv2
+import time
+from typing import List, Dict, Tuple, Optional, Union
+import os
 from tqdm import tqdm
-from transformers import Owlv2Processor, Owlv2ForObjectDetection
-from huggingface_hub import login
+import json
+from pathlib import Path
+from contextlib import nullcontext
+from concurrent.futures import ThreadPoolExecutor
+import threading
+import hashlib
+import pickle
+from datetime import datetime
 from dotenv import load_dotenv
+import tempfile
+import subprocess
+import shutil
+import traceback
 
-# Authenticate with Hugging Face
-login(token=os.getenv("HUGGING_FACE_TOKEN"))
-
+# Carregar variáveis de ambiente
 load_dotenv()
 
-class WeaponDetector:
+class WeaponDetectorSingleton:
+    _instance = None
+    _initialized = False
+    
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super(WeaponDetectorSingleton, cls).__new__(cls)
+        return cls._instance
+    
     def __init__(self):
-        # Initialize OWLv2
-        self.owlv2_processor = Owlv2Processor.from_pretrained("google/owlv2-base-patch16")
-        self.owlv2_model = Owlv2ForObjectDetection.from_pretrained("google/owlv2-base-patch16")
+        if not WeaponDetectorSingleton._initialized:
+            self._initialize()
+            WeaponDetectorSingleton._initialized = True
+    
+    def _initialize(self):
+        """Initialize the model and processor only once."""
+        print("Initializing WeaponDetector Singleton...")
         
-        # Move models to GPU if available
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        self.owlv2_model.to(self.device)
+        # Configurar device
+        self.device = self._get_best_device()
+        print(f"Using device: {self.device}")
         
-        # Cache for tracking objects between frames
-        self.previous_detections = []
-        self.tracking_threshold = 0.5  # IOU threshold for tracking
-
-    def calculate_iou(self, box1, box2):
-        """Calculate Intersection over Union between two boxes."""
-        x1, y1, x2, y2 = box1
-        x3, y3, x4, y4 = box2
+        # Configurar otimizações do PyTorch
+        torch.backends.cudnn.benchmark = True
+        if self.device.type == 'cuda':
+            torch.backends.cuda.matmul.allow_tf32 = True
+            torch.backends.cudnn.allow_tf32 = True
         
-        # Calculate intersection
-        x_left = max(x1, x3)
-        y_top = max(y1, y3)
-        x_right = min(x2, x4)
-        y_bottom = min(y2, y4)
+        # Configurar diretórios de cache
+        self.cache_dir = Path("./.cache")
+        self.model_cache_dir = self.cache_dir / "model"
+        self.video_cache_dir = self.cache_dir / "videos"
         
-        if x_right < x_left or y_bottom < y_top:
-            return 0.0
-            
-        intersection = (x_right - x_left) * (y_bottom - y_top)
+        # Criar diretórios de cache
+        self.cache_dir.mkdir(exist_ok=True)
+        self.model_cache_dir.mkdir(exist_ok=True)
+        self.video_cache_dir.mkdir(exist_ok=True)
         
-        # Calculate union
-        box1_area = (x2 - x1) * (y2 - y1)
-        box2_area = (x4 - x3) * (y4 - y3)
-        union = box1_area + box2_area - intersection
+        # Carregar modelo e processador (apenas uma vez)
+        print("Loading model and processor...")
+        self.owlv2_processor = OwlViTProcessor.from_pretrained(
+            "google/owlvit-base-patch16",  
+            cache_dir=str(self.model_cache_dir)
+        )
+        self.owlv2_model = OwlViTForObjectDetection.from_pretrained(
+            "google/owlvit-base-patch16",  
+            cache_dir=str(self.model_cache_dir)
+        ).to(self.device)
         
-        return intersection / union if union > 0 else 0
-
-    def extract_frames(self, video_path: str, fps: int = 1, max_size: int = 640) -> List[Dict]:
-        """Extract frames from video at specified FPS with size limit for optimization."""
-        frames = []
-        cap = cv2.VideoCapture(video_path)
-        video_fps = cap.get(cv2.CAP_PROP_FPS)
-        frame_interval = int(video_fps / fps)
+        # Otimizar modelo para inferência
+        self.owlv2_model.eval()
+        if self.device.type == 'cuda':
+            self.owlv2_model = torch.compile(self.owlv2_model)
         
-        # Calculate resize ratio if needed
-        width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-        height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-        resize_ratio = min(max_size / width, max_size / height, 1.0)
-        new_width = int(width * resize_ratio)
-        new_height = int(height * resize_ratio)
+        # Inicializar thread pool para processamento paralelo
+        self.thread_pool = ThreadPoolExecutor(max_workers=os.cpu_count())
         
-        frame_count = 0
-        batch_frames = []
-        batch_timestamps = []
-        batch_size = 8  # Process frames in batches for better GPU utilization
+        # Definir queries de detecção (apenas uma vez)
+        self.dangerous_objects = self._get_detection_queries()
         
-        while cap.isOpened():
-            ret, frame = cap.read()
-            if not ret:
-                break
-                
-            if frame_count % frame_interval == 0:
-                # Resize frame if needed
-                if resize_ratio < 1.0:
-                    frame = cv2.resize(frame, (new_width, new_height), interpolation=cv2.INTER_AREA)
-                
-                # Convert BGR to RGB
-                frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                timestamp = frame_count / video_fps
-                
-                batch_frames.append(Image.fromarray(frame_rgb))
-                batch_timestamps.append(timestamp)
-                
-                # Process batch when full
-                if len(batch_frames) >= batch_size:
-                    frames.extend([
-                        {"frame": frame, "timestamp": ts}
-                        for frame, ts in zip(batch_frames, batch_timestamps)
-                    ])
-                    batch_frames = []
-                    batch_timestamps = []
-            
-            frame_count += 1
+        # Pre-processar queries (apenas uma vez)
+        print("Pre-processing detection queries...")
+        text_queries = self.dangerous_objects
         
-        # Process remaining frames
-        if batch_frames:
-            frames.extend([
-                {"frame": frame, "timestamp": ts}
-                for frame, ts in zip(batch_frames, batch_timestamps)
-            ])
-        
-        cap.release()
-        return frames
-
-    def detect_objects(self, image: Image.Image, text_queries: List[str]) -> List[Dict]:
-        """Detect objects in image using OWLv2 with temporal consistency."""
-        # Prepare inputs with more specific prompts
-        detailed_queries = []
-        for query in text_queries:
-            detailed_queries.extend([
-                f"dangerous {query} being used as a weapon",
-                f"threatening {query} in attack position",
-                f"visible {query} that poses immediate danger",
-                f"{query} being brandished as a weapon"
-            ])
-        
-        # Process inputs properly
-        inputs = self.owlv2_processor(
-            images=image,
-            text=detailed_queries,
+        # Processar todas as queries de uma vez
+        self.text_inputs = self.owlv2_processor(
+            text=text_queries,
             return_tensors="pt",
             padding=True
-        )
-        
-        # Move inputs to device
-        inputs = {k: v.to(self.device) for k, v in inputs.items()}
-        
-        # Get predictions with higher threshold for better precision
-        with torch.no_grad():
-            outputs = self.owlv2_model(**inputs)
-        
-        target_sizes = torch.Tensor([[image.size[1], image.size[0]]]).to(self.device)
-        results = self.owlv2_processor.post_process_object_detection(outputs, threshold=0.3, target_sizes=target_sizes)[0]
-        
-        # Process results with temporal consistency
-        current_detections = []
-        for score, label_id, box in zip(results["scores"], results["labels"], results["boxes"]):
-            # Get base label (remove the detailed prompt parts)
-            base_label = text_queries[label_id // 4]
-            
-            # Check if this detection matches any previous detection
-            matched = False
-            if self.previous_detections:
-                for prev_detection in self.previous_detections:
-                    if prev_detection["label"] == base_label:
-                        iou = self.calculate_iou(box.tolist(), prev_detection["box"])
-                        if iou > self.tracking_threshold:
-                            # Average the scores for temporal smoothing
-                            score = (float(score) + prev_detection["score"]) / 2
-                            matched = True
-                            break
-            
-            # Add detection with confidence boost if matched
-            confidence_boost = 1.2 if matched else 1.0
-            detection = {
-                "label": base_label,
-                "score": float(score) * confidence_boost,
-                "box": box.tolist()
-            }
-            current_detections.append(detection)
-        
-        # Update previous detections for next frame
-        self.previous_detections = current_detections
-        
-        # Filter out lower confidence detections for same object
-        filtered_detections = []
-        seen_labels = set()
-        for det in sorted(current_detections, key=lambda x: x["score"], reverse=True):
-            if det["label"] not in seen_labels and det["score"] > 0.35:  # Higher threshold for final output
-                filtered_detections.append(det)
-                seen_labels.add(det["label"])
-        
-        return filtered_detections
-
-    def analyze_video(self, video_path: str) -> Tuple[List[Dict], Dict, Dict]:
-        """Analyze video for dangerous objects."""
-        # Define dangerous objects to detect - focused on bladed weapons and sharp objects
-        dangerous_objects = [
-            # Armas brancas principais
-            "knife", "machete", "sword", "dagger", "bayonet", "blade",
-            "combat knife", "hunting knife", "military knife", "tactical knife",
-            "kitchen knife", "butcher knife", "pocket knife", "utility knife",
-            
-            # Objetos cortantes
-            "razor", "box cutter", "glass shard", "broken glass", "broken bottle",
-            "scissors", "sharp metal", "sharp object", "blade weapon",
-            "scalpel", "exacto knife", "craft knife", "paper cutter",
-            
-            # Objetos perfurantes
-            "ice pick", "awl", "needle", "screwdriver", "metal spike",
-            "sharp stick", "sharp pole", "pointed metal", "metal rod",
-            
-            # Ferramentas perigosas
-            "saw blade", "circular saw", "chainsaw", "axe", "hatchet",
-            "cleaver", "metal file", "chisel", "wire cutter",
-            
-            # Armas improvisadas
-            "sharpened object", "improvised blade", "makeshift weapon",
-            "concealed blade", "hidden blade", "modified tool"
+        ).to(self.device)
+    
+    def _get_best_device(self) -> torch.device:
+        """Get the best available device for computation."""
+        if torch.cuda.is_available():
+            torch.cuda.set_device(torch.cuda.current_device())
+            return torch.device('cuda')
+        elif hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
+            return torch.device('mps')
+        else:
+            torch.set_num_threads(os.cpu_count())
+            return torch.device('cpu')
+    
+    def _get_detection_queries(self) -> List[str]:
+        """Retorna as queries para detecção de objetos perigosos."""
+        # Definir categorias de objetos perigosos
+        edged_weapons = [
+            "knife", "blade", "dagger", "machete", "sword",
+            "combat knife", "hunting knife", "kitchen knife", "pocket knife",
+            "switchblade", "butterfly knife", "folding knife", "fixed blade knife",
+            "tactical knife", "utility knife", "box cutter", "razor blade"
         ]
         
-        # Performance metrics
+        sharp_objects = [
+            "sharp object", "pointed object", "cutting tool",
+            "scissors", "shears", "glass shard", "broken glass",
+            "screwdriver", "ice pick", "awl", "needle", "metal spike",
+            "sharpened object", "blade weapon"
+        ]
+        
+        firearms = [
+            "gun", "pistol", "rifle", "firearm", "handgun",
+            "revolver", "shotgun", "assault rifle", "weapon"
+        ]
+        
+        # Contextos visuais importantes
+        visual_contexts = [
+            "close-up", "clear view", "detailed photo",
+            "high resolution image", "focused shot",
+            "visible", "clear photo", "sharp image"
+        ]
+        
+        # Características de perigo
+        danger_contexts = [
+            "dangerous", "threatening", "weapon",
+            "harmful", "hazardous", "lethal",
+            "menacing", "unsafe"
+        ]
+        
+        # Características físicas
+        physical_traits = [
+            "metallic", "sharp", "pointed",
+            "steel", "shiny", "reflective",
+            "blade-like", "edged"
+        ]
+        
+        queries = []
+        
+        # Gerar queries para armas brancas
+        for weapon in edged_weapons:
+            base_queries = [
+                f"a {weapon} with sharp edge",
+                f"a dangerous {weapon}",
+                f"{weapon} blade visible",
+                f"clear photo of {weapon}",
+                f"metallic {weapon}",
+                f"{weapon} weapon"
+            ]
+            queries.extend(base_queries)
+            
+            # Adicionar variações com contextos
+            for context in visual_contexts:
+                queries.append(f"a {context} of a {weapon}")
+            
+            for trait in physical_traits:
+                queries.append(f"a {trait} {weapon}")
+        
+        # Gerar queries para objetos cortantes
+        for obj in sharp_objects:
+            base_queries = [
+                f"a sharp {obj}",
+                f"dangerous {obj}",
+                f"pointed {obj}",
+                f"clear view of {obj}"
+            ]
+            queries.extend(base_queries)
+            
+            # Adicionar variações com contextos de perigo
+            for context in danger_contexts:
+                queries.append(f"a {context} {obj}")
+        
+        # Gerar queries para armas de fogo
+        for weapon in firearms:
+            base_queries = [
+                f"a {weapon} visible",
+                f"clear photo of {weapon}",
+                f"dangerous {weapon}",
+                f"{weapon} in frame"
+            ]
+            queries.extend(base_queries)
+            
+            # Adicionar variações com contextos
+            for context in visual_contexts[:3]:  # Limitar para não ter muitas queries
+                queries.append(f"a {context} of a {weapon}")
+        
+        # Remover duplicatas e limitar número de queries
+        queries = list(set(queries))[:200]  # Limitar a 200 queries mais relevantes
+        
+        return queries
+    
+    def _preprocess_image(self, image: Image.Image) -> Image.Image:
+        """Pré-processa a imagem para melhor detecção com OWL-ViT patch16."""
+        try:
+            # Converter para RGB se necessário
+            if image.mode != 'RGB':
+                image = image.convert('RGB')
+            
+            # 1. Redimensionamento otimizado para patch16
+            target_size = (1280, 1280)  # Aumentado para patch16 (múltiplo de 16)
+            
+            # Calcular novo tamanho mantendo aspect ratio
+            ratio = min(target_size[0] / image.size[0], target_size[1] / image.size[1])
+            new_size = tuple(int(dim * ratio) for dim in image.size)
+            
+            # Ajustar para múltiplo de 16 (patch16)
+            new_size = tuple(((dim + 15) // 16) * 16 for dim in new_size)
+            
+            # Redimensionar com Lanczos
+            image = image.resize(new_size, Image.Resampling.LANCZOS)
+            
+            # 2. Converter para array numpy para processamento avançado
+            img_array = np.array(image)
+            
+            # 3. Denoising bilateral mais suave (patch16 é mais sensível a detalhes)
+            denoised = cv2.bilateralFilter(img_array, d=7, sigmaColor=50, sigmaSpace=50)
+            
+            # 4. Ajuste de contraste adaptativo mais suave
+            lab = cv2.cvtColor(denoised, cv2.COLOR_RGB2LAB)
+            l, a, b = cv2.split(lab)
+            
+            # CLAHE mais suave para preservar detalhes
+            clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(16,16))
+            l = clahe.apply(l)
+            
+            # Recombinar canais
+            lab = cv2.merge((l,a,b))
+            enhanced = cv2.cvtColor(lab, cv2.COLOR_LAB2RGB)
+            
+            # 5. Sharpening mais suave
+            kernel = np.array([[-0.5,-0.5,-0.5],
+                             [-0.5,  5,-0.5],
+                             [-0.5,-0.5,-0.5]]) / 2
+            sharpened = cv2.filter2D(enhanced, -1, kernel)
+            
+            # 6. Normalização de cores
+            normalized = np.zeros(sharpened.shape, sharpened.dtype)
+            normalized = cv2.normalize(sharpened, normalized, 0, 255, cv2.NORM_MINMAX)
+            
+            # 7. Ajuste de gama mais suave
+            gamma = 1.1  # Mais suave para preservar detalhes
+            inv_gamma = 1.0 / gamma
+            table = np.array([((i / 255.0) ** inv_gamma) * 255 for i in range(256)]).astype(np.uint8)
+            gamma_corrected = cv2.LUT(normalized, table)
+            
+            # 8. Aumentar saturação levemente
+            hsv = cv2.cvtColor(gamma_corrected, cv2.COLOR_RGB2HSV)
+            hsv[:,:,1] = hsv[:,:,1] * 1.2  # 20% de aumento
+            hsv[:,:,1] = np.clip(hsv[:,:,1], 0, 255)
+            saturated = cv2.cvtColor(hsv, cv2.COLOR_HSV2RGB)
+            
+            # 9. Criar padding com borda refletida
+            # Calcular padding para manter múltiplo de 16
+            h, w = saturated.shape[:2]
+            pad_h = (16 - h % 16) % 16
+            pad_w = (16 - w % 16) % 16
+            
+            padded = cv2.copyMakeBorder(
+                saturated,
+                pad_h//2, (pad_h+1)//2,
+                pad_w//2, (pad_w+1)//2,
+                cv2.BORDER_REFLECT
+            )
+            
+            # 10. Redimensionar para o tamanho final com padding preto
+            final_image = Image.new('RGB', target_size, (0, 0, 0))
+            padded_pil = Image.fromarray(padded)
+            paste_pos = ((target_size[0] - padded.shape[1]) // 2,
+                        (target_size[1] - padded.shape[0]) // 2)
+            final_image.paste(padded_pil, paste_pos)
+            
+            return final_image
+            
+        except Exception as e:
+            print(f"Erro no pré-processamento: {str(e)}")
+            return image
+
+    @torch.inference_mode()
+    def detect_objects(self, image: Image.Image, threshold: float = 0.3) -> List[Dict]:
+        """Detect objects in image using pre-processed queries."""
+        try:
+            # Melhorar qualidade da imagem
+            image = self._preprocess_image(image)
+            
+            # Processar imagem com diferentes escalas (mais granular para patch16)
+            scales = [0.85, 1.0, 1.15]  # Escalas mais próximas para patch16
+            all_detections = []
+            
+            for scale in scales:
+                # Redimensionar imagem (mantendo múltiplo de 16)
+                w, h = image.size
+                scaled_size = (int(w * scale), int(h * scale))
+                scaled_size = tuple(((dim + 15) // 16) * 16 for dim in scaled_size)
+                scaled_image = image.resize(scaled_size, Image.Resampling.LANCZOS)
+                
+                # Processar imagem
+                image_inputs = self.owlv2_processor(
+                    images=scaled_image,
+                    return_tensors="pt"
+                ).to(self.device)
+                
+                # Combinar com as queries pré-processadas
+                inputs = {**image_inputs, **self.text_inputs}
+                
+                # Usar autocast para melhor performance
+                with torch.cuda.amp.autocast() if self.device.type == 'cuda' else nullcontext():
+                    outputs = self.owlv2_model(**inputs)
+                
+                # Processar resultados
+                target_sizes = torch.tensor([scaled_image.size[::-1]], device=self.device)
+                results = self.owlv2_processor.post_process_object_detection(
+                    outputs=outputs,
+                    target_sizes=target_sizes,
+                    threshold=threshold
+                )[0]
+                
+                # Ajustar coordenadas para escala original
+                scores = results["scores"]
+                boxes = results["boxes"]
+                labels = results["labels"]
+                
+                for score, box, label in zip(scores, boxes, labels):
+                    # Converter box para escala original
+                    x1, y1, x2, y2 = box.tolist()
+                    orig_box = [
+                        int(x1 / scale),
+                        int(y1 / scale),
+                        int(x2 / scale),
+                        int(y2 / scale)
+                    ]
+                    
+                    all_detections.append({
+                        "score": score.item(),
+                        "box": orig_box,
+                        "label": self.dangerous_objects[label]
+                    })
+            
+            # Non-maximum suppression com IoU mais baixo para patch16
+            filtered_detections = []
+            all_detections.sort(key=lambda x: x["score"], reverse=True)
+            
+            while all_detections:
+                best = all_detections.pop(0)
+                filtered_detections.append(best)
+                
+                # Remover detecções sobrepostas (IoU mais baixo para patch16)
+                all_detections = [
+                    d for d in all_detections
+                    if self._calculate_iou(best["box"], d["box"]) < 0.4  # IoU mais baixo
+                ]
+            
+            return filtered_detections
+            
+        except Exception as e:
+            print(f"Erro em detect_objects: {str(e)}")
+            return []
+            
+    def _calculate_iou(self, box1, box2):
+        """Calcula IoU (Intersection over Union) entre duas boxes."""
+        x1 = max(box1[0], box2[0])
+        y1 = max(box1[1], box2[1])
+        x2 = min(box1[2], box2[2])
+        y2 = min(box1[3], box2[3])
+        
+        intersection = max(0, x2 - x1) * max(0, y2 - y1)
+        
+        area1 = (box1[2] - box1[0]) * (box1[3] - box1[1])
+        area2 = (box2[2] - box2[0]) * (box2[3] - box2[1])
+        
+        union = area1 + area2 - intersection
+        
+        return intersection / union if union > 0 else 0
+    
+    def _get_cache_key(self, video_path: str, fps: int, threshold: float) -> str:
+        """Generate cache key based on video content and parameters."""
+        hasher = hashlib.sha256()
+        with open(video_path, 'rb') as f:
+            for chunk in iter(lambda: f.read(8192), b''):
+                hasher.update(chunk)
+        params = f"{fps}_{threshold}"
+        hasher.update(params.encode())
+        return hasher.hexdigest()
+    
+    def _get_cache_path(self, cache_key: str) -> Path:
+        """Get cache file path for given key."""
+        return self.video_cache_dir / f"{cache_key}.cache"
+    
+    def extract_frames(self, video_path: str, fps: int = 2) -> List[Tuple[float, np.ndarray]]:
+        """Extract frames from video using ffmpeg."""
+        frames = []
+        
+        # Criar diretório temporário para os frames
+        temp_dir = Path(tempfile.mkdtemp())
+        
+        try:
+            # Comando ffmpeg para extrair frames
+            cmd = [
+                'ffmpeg', '-i', video_path,
+                '-vf', f'fps={fps},scale=768:768:force_original_aspect_ratio=decrease,pad=768:768:(ow-iw)/2:(oh-ih)/2',
+                '-frame_pts', '1',  # Adiciona timestamp nos frames
+                f'{temp_dir}/%d.jpg'
+            ]
+            
+            subprocess.run(cmd, check=True, capture_output=True)
+            
+            # Ler frames extraídos
+            frame_files = sorted(temp_dir.glob('*.jpg'), key=lambda x: int(x.stem))
+            
+            for frame_file in tqdm(frame_files, desc="Carregando frames"):
+                # Ler frame
+                frame = cv2.imread(str(frame_file))
+                
+                # Calcular timestamp baseado no número do frame
+                frame_number = int(frame_file.stem)
+                timestamp = (frame_number - 1) / fps
+                
+                frames.append((timestamp, frame))
+                
+        finally:
+            # Limpar diretório temporário
+            shutil.rmtree(temp_dir)
+            
+        return frames
+
+    def analyze_video(self, video_path: str, threshold: float = 0.3, fps: int = 5, cancel_event=None) -> Tuple[List[Dict], Dict, Dict]:
+        """Analyze video for dangerous objects."""
         metrics = {
-            "start_time": time.time(),
+            "total_time": 0,
             "frame_extraction_time": 0,
             "analysis_time": 0,
-            "total_time": 0,
             "frames_analyzed": 0,
-            "video_duration": 0
+            "video_duration": 0,
+            "device_type": self.device.type
         }
         
-        # Extract frames with higher FPS
-        print("Extracting frames from video...")
-        frame_extraction_start = time.time()
-        frames = self.extract_frames(video_path, fps=2)  # Aumentado para 2 FPS
-        metrics["frame_extraction_time"] = time.time() - frame_extraction_start
+        start_time = time.time()
+        
+        # Extrair frames do vídeo
+        t0 = time.time()
+        frames = self.extract_frames(video_path, fps)
+        metrics["frame_extraction_time"] = time.time() - t0
         metrics["frames_analyzed"] = len(frames)
-        if frames:
-            metrics["video_duration"] = frames[-1]["timestamp"]
         
-        # Analyze frames
-        print(f"\nAnalyzing {len(frames)} frames for dangerous objects...")
-        analysis_start = time.time()
+        if not frames:
+            print("No frames extracted from video")
+            return [], {"risk_status": "unknown", "time_ranges": []}, metrics
         
+        # Calcular duração do vídeo baseado no último timestamp
+        metrics["video_duration"] = max(frames[-1][0] if frames else 1.0, 1.0)  # Mínimo de 1s para evitar divisão por zero
+        
+        t0 = time.time()
         detections = []
         timestamps = set()
         
-        for frame_data in tqdm(frames, desc="Processing frames"):
-            frame_detections = self.detect_objects(frame_data["frame"], dangerous_objects)
+        # Processar frames em lotes
+        batch_size = 4 if self.device.type == 'cuda' else 2
+        for i in range(0, len(frames), batch_size):
+            if cancel_event and cancel_event.is_set():
+                return [], {}, metrics
             
-            for detection in frame_detections:
-                timestamps.add(frame_data["timestamp"])
-                detection_info = {
-                    "type": detection["label"],
-                    "timestamp": frame_data["timestamp"],
-                    "confidence": f"{detection['score']*100:.1f}%",
-                    "description": f"A {detection['label']} was detected in the scene",
-                    "detection_score": detection["score"],
-                    "box": detection["box"]
-                }
-                detections.append(detection_info)
+            batch_frames = frames[i:i + batch_size]
+            futures = []
+            
+            # Submeter frames para detecção em paralelo
+            for timestamp, frame in batch_frames:
+                # Converter BGR para RGB e para PIL
+                frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                frame_pil = Image.fromarray(frame_rgb)
+                
+                future = self.thread_pool.submit(
+                    self.detect_objects,
+                    frame_pil,
+                    threshold
+                )
+                futures.append((future, timestamp, frame))
+            
+            # Coletar resultados
+            for future, timestamp, original_frame in futures:
+                try:
+                    frame_detections = future.result()
+                    timestamps.add(timestamp)
+                    
+                    # Adicionar informações extras às detecções
+                    for detection in frame_detections:
+                        detection.update({
+                            "timestamp": timestamp,
+                            "frame": original_frame,  # Manter como numpy array
+                            "type": detection["label"]
+                        })
+                    
+                    detections.extend(frame_detections)
+                except Exception as e:
+                    print(f"Error processing frame at {timestamp}: {str(e)}")
         
-        metrics["analysis_time"] = time.time() - analysis_start
+        metrics["analysis_time"] = time.time() - t0
+        metrics["total_time"] = time.time() - start_time
         
-        # Create time ranges
+        # Gerar resumo
+        json_summary = {
+            "risk_status": "danger" if detections else "safe",
+            "time_ranges": self._create_time_ranges(sorted(timestamps))
+        }
+        
+        # Gerar vídeo com análise
+        if detections:
+            output_path = self.generate_output_video(video_path, detections, fps=fps)
+            json_summary["output_video"] = output_path
+        
+        return detections, json_summary, metrics
+
+    def generate_output_video(self, video_path: str, detections: List[Dict], output_path: str = None, fps: int = 30) -> str:
+        """Gera vídeo final usando apenas os frames analisados."""
+        try:
+            if not output_path:
+                output_path = f"{os.path.splitext(video_path)[0]}_analyzed.mp4"
+            
+            # Obter FPS do vídeo original
+            cap = cv2.VideoCapture(video_path)
+            video_fps = int(cap.get(cv2.CAP_PROP_FPS))
+            cap.release()
+            
+            # Gerar filtros para as detecções
+            draw_filter = self.generate_ffmpeg_filter(detections, video_fps)
+            if not draw_filter:
+                print("Nenhuma detecção para desenhar")
+                return video_path
+            
+            # Construir comando ffmpeg
+            cmd = [
+                'ffmpeg', '-y',
+                '-i', video_path,
+                '-vf', f"format=rgb24,{draw_filter},format=yuv420p",
+                '-c:v', 'libx264',
+                '-preset', 'ultrafast',
+                '-crf', '23',
+                '-c:a', 'copy',
+                '-movflags', '+faststart',
+                output_path
+            ]
+            
+            print("Comando ffmpeg:", " ".join(cmd))
+            
+            # Executar comando com timeout
+            try:
+                process = subprocess.Popen(
+                    cmd,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE
+                )
+                
+                # Esperar com timeout
+                stdout, stderr = process.communicate(timeout=300)  # 5 minutos
+                
+                if process.returncode != 0:
+                    print(f"Erro ao gerar vídeo: {stderr.decode()}")
+                    return video_path
+                
+                return output_path
+                
+            except subprocess.TimeoutExpired:
+                process.kill()
+                print("Timeout ao gerar vídeo")
+                return video_path
+                
+        except Exception as e:
+            print(f"Erro ao gerar vídeo: {str(e)}")
+            traceback.print_exc()
+            return video_path
+
+    def draw_bounding_boxes(self, frame: np.ndarray, detections: List[Dict]) -> np.ndarray:
+        """Desenha os bounding boxes nos frames."""
+        try:
+            # Converter para PIL para desenho
+            image = Image.fromarray(frame)
+            draw = ImageDraw.Draw(image)
+            
+            # Configurações visuais
+            box_color = (255, 0, 0)  # Vermelho para risco
+            text_color = (255, 255, 255)  # Branco para texto
+            font_size = max(1, int(image.size[0] / 40))  # Tamanho proporcional à imagem
+            
+            try:
+                font = ImageFont.truetype("Arial.ttf", font_size)
+            except:
+                font = ImageFont.load_default()
+            
+            # Desenhar cada detecção
+            for detection in detections:
+                # Extrair coordenadas
+                box = detection["box"]
+                x1, y1, x2, y2 = map(int, box)
+                
+                # Desenhar retângulo
+                draw.rectangle([x1, y1, x2, y2], outline=box_color, width=3)
+                
+                # Preparar texto
+                text = "RISK"
+                text_w, text_h = draw.textsize(text, font=font)
+                
+                # Desenhar fundo para o texto
+                margin = 5
+                text_box = [x1, y1 - text_h - 2*margin, x1 + text_w + 2*margin, y1]
+                draw.rectangle(text_box, fill=box_color)
+                
+                # Desenhar texto
+                text_pos = (x1 + margin, y1 - text_h - margin)
+                draw.text(text_pos, text, fill=text_color, font=font)
+            
+            return np.array(image)
+            
+        except Exception as e:
+            print(f"Erro ao desenhar bounding boxes: {str(e)}")
+            return frame
+
+    def generate_ffmpeg_filter(self, detections, fps):
+        """
+        Gera um filtro ffmpeg para desenhar bounding boxes no vídeo.
+        """
+        try:
+            if not detections:
+                return ""
+            
+            # Agrupar detecções por timestamp
+            detections_by_time = {}
+            for d in detections:
+                t = d.get("timestamp", 0)
+                if t not in detections_by_time:
+                    detections_by_time[t] = []
+                detections_by_time[t].append(d)
+            
+            # Gerar comandos de desenho
+            draw_commands = []
+            
+            for timestamp, frame_detections in detections_by_time.items():
+                frame_number = int(timestamp * fps)
+                
+                for detection in frame_detections:
+                    box = detection["box"]
+                    x1, y1, x2, y2 = map(int, box)
+                    w = x2 - x1
+                    h = y2 - y1
+                    
+                    # Comando para o retângulo vermelho
+                    rect_cmd = f"drawbox=x={x1}:y={y1}:w={w}:h={h}:color=red:thickness=3"
+                    
+                    # Texto "RISK"
+                    text_y = max(30, y1 - 10)  # Evitar texto fora da tela
+                    
+                    # Fundo vermelho para o texto
+                    text_bg = f"drawbox=x={x1}:y={text_y-20}:w=60:h=20:color=red:thickness=fill"
+                    
+                    # Texto em branco
+                    text_cmd = f"drawtext=text=RISK:x={x1+5}:y={text_y-15}:fontsize=16:fontcolor=white:shadowcolor=black:shadowx=1:shadowy=1"
+                    
+                    # Adicionar enable condition para o frame específico
+                    for cmd in [rect_cmd, text_bg, text_cmd]:
+                        draw_commands.append(f"{cmd}:enable='eq(n,{frame_number})'")
+            
+            # Combinar todos os comandos
+            if draw_commands:
+                return ",".join(draw_commands)
+            
+            return ""
+            
+        except Exception as e:
+            print(f"Erro ao gerar filtro ffmpeg: {str(e)}")
+            return ""
+
+    def _load_from_cache(self, cache_key: str) -> Optional[Dict]:
+        """Load results from cache if available and valid."""
+        cache_path = self._get_cache_path(cache_key)
+        if cache_path.exists():
+            try:
+                with open(cache_path, 'rb') as f:
+                    cache_data = pickle.load(f)
+                # Cache é válido por 24 horas
+                cache_time = datetime.fromisoformat(cache_data["timestamp"])
+                if (datetime.now() - cache_time).total_seconds() < 86400:
+                    return cache_data["data"]
+            except Exception as e:
+                print(f"Erro ao carregar cache: {str(e)}")
+                # Remover cache corrompido
+                cache_path.unlink(missing_ok=True)
+        return None
+    
+    def _save_to_cache(self, cache_key: str, data: Dict):
+        """Save results to cache with metadata."""
+        cache_data = {
+            "timestamp": datetime.now().isoformat(),
+            "data": data
+        }
+        cache_path = self._get_cache_path(cache_key)
+        with open(cache_path, 'wb') as f:
+            pickle.dump(cache_data, f)
+    
+    def _create_time_ranges(self, timestamps: List[float]) -> List[Dict]:
+        """Create time ranges with optimized gap threshold."""
         timestamps_list = sorted(list(timestamps))
         ranges = []
         if timestamps_list:
@@ -258,85 +716,99 @@ class WeaponDetector:
             prev_time = timestamps_list[0]
             
             for t in timestamps_list[1:]:
-                if t - prev_time > 1.0:
+                if t - prev_time > 0.5:
                     ranges.append((range_start, prev_time))
                     range_start = t
                 prev_time = t
             ranges.append((range_start, prev_time))
         
-        # Create summary
-        json_summary = {
-            "risk_status": "Risk found!!" if detections else "No risk detected",
-            "timestamps": list(timestamps),
-            "time_ranges": [
-                {
-                    "start": start,
-                    "end": end,
-                    "duration": end - start
-                }
-                for start, end in ranges
-            ]
-        }
-        
-        metrics["total_time"] = time.time() - metrics["start_time"]
-        
-        return detections, json_summary, metrics
+        return [
+            {
+                "start": start,
+                "end": end,
+                "duration": end - start
+            }
+            for start, end in ranges
+        ]
 
-def main():
-    try:
-        # Initialize detector
-        detector = WeaponDetector()
-        
-        # Video path
-        video_path = "video.mp4"
-        
-        if not os.path.exists(video_path):
-            raise FileNotFoundError(f"Video file not found: {video_path}")
-        
-        print("Starting video analysis...")
-        results, json_summary, performance_metrics = detector.analyze_video(video_path)
-        
-        # Print results
-        if not results:
-            print("\nNo dangerous objects were detected in the video.")
-        else:
-            print(f"\nDetected {len(results)} dangerous objects:")
-            current_timestamp = None
-            
-            for obj in results:
-                if current_timestamp != obj['timestamp']:
-                    current_timestamp = obj['timestamp']
-                    print(f"\nAt {obj['timestamp']} seconds:")
-                
-                print(f"- Type: {obj['type']}")
-                print(f"  Confidence: {obj['confidence']}")
-                print(f"  Description: {obj['description']}")
-        
-        print("\nJSON Summary:")
-        print(json.dumps(json_summary, indent=2))
-        
-        if json_summary["time_ranges"]:
-            print("\nTime Ranges Analysis:")
-            for range_info in json_summary["time_ranges"]:
-                print(f"- Risk detected from {range_info['start']} to {range_info['end']} seconds (duration: {range_info['duration']} seconds)")
-            
-            total_duration = sum(r['duration'] for r in json_summary["time_ranges"])
-            print(f"\nTotal time with risks detected: {total_duration} seconds")
-        
-        # Print performance metrics
-        print("\nPerformance Metrics:")
-        print(f"Video Duration: {performance_metrics['video_duration']:.2f} seconds")
-        print(f"Frames Analyzed: {performance_metrics['frames_analyzed']}")
-        print(f"Frame Extraction Time: {performance_metrics['frame_extraction_time']:.2f} seconds")
-        print(f"Analysis Time: {performance_metrics['analysis_time']:.2f} seconds")
-        print(f"Total Processing Time: {performance_metrics['total_time']:.2f} seconds")
-        if results:
-            print(f"Average Time per Detection: {performance_metrics['analysis_time']/len(results):.3f} seconds")
-            print(f"Processing Speed: {performance_metrics['video_duration']/performance_metrics['total_time']:.2f}x realtime")
+class WeaponDetector:
+    def __init__(self):
+        """Initialize using the Singleton instance."""
+        self._detector = WeaponDetectorSingleton()
     
-    except Exception as e:
-        print(f"\nError: {str(e)}")
-        raise
-
-if __name__ == "__main__":
-    main() 
+    @property
+    def device(self):
+        return self._detector.device
+    
+    @property
+    def owlv2_processor(self):
+        return self._detector.owlv2_processor
+    
+    @property
+    def owlv2_model(self):
+        return self._detector.owlv2_model
+    
+    @property
+    def thread_pool(self):
+        return self._detector.thread_pool
+    
+    @property
+    def dangerous_objects(self):
+        return self._detector.dangerous_objects
+    
+    @property
+    def text_inputs(self):
+        return self._detector.text_inputs
+    
+    def _get_cache_key(self, video_path: str, fps: int, threshold: float) -> str:
+        """Generate cache key based on video content and parameters."""
+        hasher = hashlib.sha256()
+        with open(video_path, 'rb') as f:
+            for chunk in iter(lambda: f.read(8192), b''):
+                hasher.update(chunk)
+        params = f"{fps}_{threshold}"
+        hasher.update(params.encode())
+        return hasher.hexdigest()
+    
+    def _get_cache_path(self, cache_key: str) -> Path:
+        """Get cache file path for given key."""
+        return self._detector.video_cache_dir / f"{cache_key}.cache"
+    
+    @torch.inference_mode()
+    def detect_objects(self, image: Image.Image, threshold: float = 0.3) -> List[Dict]:
+        """Detect objects in image using pre-processed queries."""
+        return self._detector.detect_objects(image, threshold)
+    
+    def extract_frames(self, video_path: str, fps: int = 2) -> List[Tuple[float, np.ndarray]]:
+        """Extract frames from video using ffmpeg."""
+        return self._detector.extract_frames(video_path, fps)
+    
+    def analyze_video(self, video_path: str, threshold: float = 0.3, fps: int = 5, cancel_event=None) -> Tuple[List[Dict], Dict, Dict]:
+        """Analyze video for dangerous objects."""
+        return self._detector.analyze_video(video_path, threshold, fps, cancel_event)
+    
+    def generate_output_video(self, video_path: str, detections: List[Dict], output_path: str = None, fps: int = 30) -> str:
+        """Gera vídeo final usando apenas os frames analisados."""
+        return self._detector.generate_output_video(video_path, detections, output_path, fps)
+    
+    def draw_bounding_boxes(self, frame: np.ndarray, detections: List[Dict]) -> np.ndarray:
+        """Desenha os bounding boxes nos frames."""
+        return self._detector.draw_bounding_boxes(frame, detections)
+    
+    def generate_ffmpeg_filter(self, detections, fps):
+        """
+        Gera um filtro ffmpeg para desenhar bounding boxes no vídeo.
+        """
+        return self._detector.generate_ffmpeg_filter(detections, fps)
+    
+    def _load_from_cache(self, cache_key: str) -> Optional[Dict]:
+        """Load results from cache if available and valid."""
+        return self._detector._load_from_cache(cache_key)
+    
+    def _save_to_cache(self, cache_key: str, data: Dict):
+        """Save results to cache with metadata."""
+        return self._detector._save_to_cache(cache_key, data)
+    
+    def _create_time_ranges(self, timestamps: List[float]) -> List[Dict]:
+        """Create time ranges with optimized gap threshold."""
+        return self._detector._create_time_ranges(timestamps)
