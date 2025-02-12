@@ -41,7 +41,7 @@ def main():
             # Primeiro configurar a fila
             demo = demo.queue(
                 max_size=16,  # Aumentado para corresponder ao max_batch_size
-                max_concurrent=max_concurrent,  # Baseado na memória GPU
+                concurrency_limit=max_concurrent,  # Baseado na memória GPU
                 status_update_rate=10,  # Atualizações mais frequentes
                 api_open=False,
                 max_batch_size=16  # Aumentado para corresponder ao detector
