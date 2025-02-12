@@ -67,7 +67,7 @@ tomlkit
 torch
 torchvision
 tqdm
-transformers==4.48.3
+git+https://github.com/huggingface/transformers.git
 typer
 typing_extensions
 tzdata
