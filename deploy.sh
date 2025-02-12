@@ -18,25 +18,18 @@ echo "🚀 Preparando deploy para GitHub..."
 echo "📦 Adicionando arquivos para GitHub..."
 git add .
 
-# Verificar se há alterações para commitar
-if [[ -n $(git status -s) ]]; then
-    echo "📝 Existem alterações para commitar no GitHub"
-    
-    # Fazer commit
-    git commit -m "$commit_message"
-    
-    # Force push para GitHub
-    echo "🚀 Forçando push para GitHub..."
-    git push -f origin main
-    
-    if [ $? -eq 0 ]; then
-        echo "✅ Deploy para GitHub concluído com sucesso!"
-    else
-        echo "❌ Erro durante o deploy para GitHub"
-        exit 1
-    fi
+# Fazer commit
+git commit -m "$commit_message"
+
+# Force push para GitHub
+echo "🚀 Forçando push para GitHub..."
+git push -f origin main
+
+if [ $? -eq 0 ]; then
+    echo "✅ Deploy para GitHub concluído com sucesso!"
 else
-    echo "✨ Workspace limpo, nenhuma alteração para GitHub"
+    echo "❌ Erro durante o deploy para GitHub"
+    exit 1
 fi
 
 # Deploy para Hugging Face
@@ -54,32 +47,26 @@ fi
 echo "📦 Adicionando todos os arquivos..."
 git add --all
 
-# Verificar se há alterações para o Hugging Face
-if [[ -n $(git status -s) ]]; then
-    echo "📝 Existem alterações para commitar no Hugging Face"
-    
-    # Fazer commit
-    git commit -m "$commit_message"
-    
-    echo "🚀 Enviando para Hugging Face Space..."
-    git push -f space main
-    
-    if [ $? -eq 0 ]; then
-        echo "✅ Deploy para Hugging Face concluído com sucesso!"
-        echo "🌐 Seu app estará disponível em alguns minutos em:"
-        echo "   https://huggingface.co/spaces/marcuscanhaco/weapon-detection-app"
-        echo ""
-        echo "⚠️ Lembre-se de verificar no Hugging Face Space se:"
-        echo "  1. O Space está configurado para usar GPU T4"
-        echo "  2. As variáveis de ambiente estão configuradas corretamente:"
-        echo "     - HUGGING_FACE_TOKEN"
-        echo "     - NOTIFICATION_EMAIL"
-        echo "     - SENDGRID_API_KEY"
-        echo "  3. Os requisitos de memória estão adequados"
-    else
-        echo "❌ Erro durante o deploy para Hugging Face"
-        exit 1
-    fi
+# Fazer commit
+git commit -m "$commit_message"
+
+# Force push para Hugging Face
+echo "🚀 Enviando para Hugging Face Space..."
+git push -f space main
+
+if [ $? -eq 0 ]; then
+    echo "✅ Deploy para Hugging Face concluído com sucesso!"
+    echo "🌐 Seu app estará disponível em alguns minutos em:"
+    echo "   https://huggingface.co/spaces/marcuscanhaco/weapon-detection-app"
+    echo ""
+    echo "⚠️ Lembre-se de verificar no Hugging Face Space se:"
+    echo "  1. O Space está configurado para usar GPU T4"
+    echo "  2. As variáveis de ambiente estão configuradas corretamente:"
+    echo "     - HUGGING_FACE_TOKEN"
+    echo "     - NOTIFICATION_EMAIL"
+    echo "     - SENDGRID_API_KEY"
+    echo "  3. Os requisitos de memória estão adequados"
 else
-    echo "✨ Workspace limpo, nenhuma alteração para Hugging Face"
+    echo "❌ Erro durante o deploy para Hugging Face"
+    exit 1
 fi 

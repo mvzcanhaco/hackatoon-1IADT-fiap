@@ -60,7 +60,7 @@ class WeaponDetectorCPU(BaseDetector):
             torch.set_num_interop_threads(min(8, os.cpu_count()))
             
             # Carregar modelo com configurações otimizadas
-            cache_dir = os.getenv('CACHE_DIR', '/tmp/weapon_detection_cache')
+            cache_dir = os.path.join(tempfile.gettempdir(), 'weapon_detection_cache')
             os.makedirs(cache_dir, exist_ok=True)
             
             model_name = "google/owlv2-base-patch16"

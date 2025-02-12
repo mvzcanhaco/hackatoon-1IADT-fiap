@@ -10,6 +10,7 @@ import cv2
 from PIL import Image
 from transformers import Owlv2Processor, Owlv2ForObjectDetection
 from .base import BaseDetector, BaseCache
+import tempfile
 
 logger = logging.getLogger(__name__)
 
@@ -48,7 +49,7 @@ class WeaponDetectorGPU(BaseDetector):
             self.device = self._get_best_device()
             
             # Diretório de cache para o modelo
-            cache_dir = os.getenv('CACHE_DIR', '/tmp/weapon_detection_cache')
+            cache_dir = os.path.join(tempfile.gettempdir(), 'weapon_detection_cache')
             os.makedirs(cache_dir, exist_ok=True)
             
             # Limpar memória GPU

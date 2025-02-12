@@ -36,23 +36,22 @@ RUN pip install --no-cache-dir -U pip setuptools wheel && \
     pip install --no-cache-dir --upgrade "tokenizers>=0.15.0" && \
     pip install --no-cache-dir --upgrade "git+https://github.com/huggingface/transformers.git"
 
-# Criar diretório de vídeos e cache
-RUN mkdir -p /code/videos /code/.cache/huggingface /code/.cache/torch && \
-    chmod -R 777 /code/.cache /code/videos
+# Criar diretório de vídeos
+RUN mkdir -p /code/videos && chmod -R 777 /code/videos
 
 # Configurar variáveis de ambiente
 ENV HOST=0.0.0.0 \
     PORT=7860 \
     PYTHONUNBUFFERED=1 \
     PYTHONPATH=/code \
-    TRANSFORMERS_CACHE=/code/.cache/huggingface \
-    TORCH_HOME=/code/.cache/torch \
+    TRANSFORMERS_CACHE=/tmp/huggingface \
+    TORCH_HOME=/tmp/torch \
     GRADIO_SERVER_NAME=0.0.0.0 \
     GRADIO_SERVER_PORT=7860 \
     SYSTEM=spaces \
     CUDA_VISIBLE_DEVICES=0 \
-    HUGGINGFACE_HUB_CACHE=/code/.cache/huggingface \
-    HF_HOME=/code/.cache/huggingface \
+    HUGGINGFACE_HUB_CACHE=/tmp/huggingface \
+    HF_HOME=/tmp/huggingface \
     TORCH_CUDA_ARCH_LIST="7.5" \
     MAX_WORKERS=2 \
     TRANSFORMERS_OFFLINE=0 \
