@@ -72,7 +72,7 @@ def is_gpu_available():
                 return False
                 
             # Verificar se podemos realmente usar a GPU
-            device = torch.device('cuda')
+            device = torch.device(0)  # Usar índice do dispositivo
             dummy_tensor = torch.zeros(1, device=device)
             del dummy_tensor
             torch.cuda.empty_cache()
