@@ -5,10 +5,8 @@ from pathlib import Path
 from src.application.use_cases.process_video import ProcessVideoUseCase, ProcessVideoRequest
 from src.infrastructure.services.weapon_detector import WeaponDetectorService
 from src.infrastructure.services.notification_services import NotificationServiceFactory
-from huggingface_hub import hf_hub_download, list_repo_files, snapshot_download
-import tempfile
-import shutil
 import logging
+import requests
 
 logger = logging.getLogger(__name__)
 
@@ -20,9 +18,31 @@ class GradioInterface:
         self.notification_factory = NotificationServiceFactory()
         self.default_fps = 2 if self.detector.device_type == "GPU" else 1
         self.default_resolution = "640" if self.detector.device_type == "GPU" else "480"
-        self.dataset_id = "marcuscanhaco/weapon-test"  # ID do dataset de teste
-        self.videos_cache_dir = Path(tempfile.gettempdir()) / "weapon_detection_videos"
         self.is_huggingface = os.getenv('SPACE_ID') is not None
+        
+        # URLs dos vídeos de exemplo do dataset
+        self.sample_videos = [
+            {
+                'url': 'https://huggingface.co/datasets/marcuscanhaco/weapon-test/resolve/main/risco_detectado/video_risco_1.mp4',
+                'name': 'Vídeo com Risco 1',
+                'ground_truth': '🚨 Risco Detectado'
+            },
+            {
+                'url': 'https://huggingface.co/datasets/marcuscanhaco/weapon-test/resolve/main/risco_detectado/video_risco_2.mp4',
+                'name': 'Vídeo com Risco 2',
+                'ground_truth': '🚨 Risco Detectado'
+            },
+            {
+                'url': 'https://huggingface.co/datasets/marcuscanhaco/weapon-test/resolve/main/seguro/video_seguro_1.mp4',
+                'name': 'Vídeo Seguro 1',
+                'ground_truth': '✅ Seguro'
+            },
+            {
+                'url': 'https://huggingface.co/datasets/marcuscanhaco/weapon-test/resolve/main/seguro/video_seguro_2.mp4',
+                'name': 'Vídeo Seguro 2',
+                'ground_truth': '✅ Seguro'
+            }
+        ]
         
         self.use_case = ProcessVideoUseCase(
             detector=self.detector,
@@ -30,64 +50,17 @@ class GradioInterface:
             default_fps=self.default_fps,
             default_resolution=int(self.default_resolution)
         )
-        
-        # Criar diretório de cache se não existir
-        if self.is_huggingface:
-            self.videos_cache_dir.mkdir(parents=True, exist_ok=True)
-            logger.info(f"Diretório de cache criado em: {self.videos_cache_dir}")
-    
-    def _download_dataset_videos(self) -> bool:
-        """Baixa os vídeos do dataset do Hugging Face."""
-        try:
-            logger.info(f"Iniciando download do dataset {self.dataset_id}")
-            
-            # Listar arquivos disponíveis no dataset
-            files = list_repo_files(self.dataset_id, repo_type="dataset")
-            logger.info(f"Arquivos encontrados no dataset: {files}")
-            
-            # Baixar cada arquivo de vídeo individualmente
-            for file in files:
-                if file.lower().endswith(('.mp4', '.avi', '.mov', '.mkv')):
-                    try:
-                        local_file = hf_hub_download(
-                            repo_id=self.dataset_id,
-                            filename=file,
-                            repo_type="dataset",
-                            local_dir=str(self.videos_cache_dir)
-                        )
-                        logger.info(f"Arquivo baixado com sucesso: {local_file}")
-                    except Exception as e:
-                        logger.error(f"Erro ao baixar arquivo {file}: {str(e)}")
-            
-            return True
-            
-        except Exception as e:
-            logger.error(f"Erro ao baixar dataset: {str(e)}")
-            return False
     
     def list_sample_videos(self) -> list:
         """Lista os vídeos de exemplo do dataset ou da pasta local."""
         try:
-            video_extensions = ['.mp4', '.avi', '.mov', '.mkv']
-            videos = []
-            
             if self.is_huggingface:
-                logger.info("Ambiente Hugging Face detectado, usando dataset")
-                if self._download_dataset_videos():
-                    logger.info(f"Procurando vídeos em: {self.videos_cache_dir}")
-                    # Listar todos os vídeos no diretório de cache
-                    for ext in video_extensions:
-                        for video_path in Path(self.videos_cache_dir).rglob(f'*{ext}'):
-                            logger.info(f"Vídeo encontrado: {video_path}")
-                            videos.append({
-                                'path': str(video_path),
-                                'name': video_path.name,
-                                'ground_truth': '📼 Vídeo de Teste'
-                            })
-                else:
-                    logger.error("Falha ao baixar dataset")
+                logger.info("Ambiente Hugging Face detectado, usando URLs do dataset")
+                return self.sample_videos
             else:
                 logger.info("Ambiente local detectado, usando pasta videos")
+                video_extensions = ['.mp4', '.avi', '.mov', '.mkv']
+                videos = []
                 base_dir = Path("videos")
                 if not base_dir.exists():
                     os.makedirs(base_dir)
@@ -98,25 +71,31 @@ class GradioInterface:
                     for video_path in base_dir.glob(f'**/*{ext}'):
                         logger.info(f"Vídeo local encontrado: {video_path}")
                         videos.append({
-                            'path': str(video_path),
+                            'url': str(video_path),
                             'name': video_path.name,
                             'ground_truth': '📼 Vídeo de Teste'
                         })
-            
-            logger.info(f"Total de vídeos encontrados: {len(videos)}")
-            return videos
+                
+                return videos
             
         except Exception as e:
             logger.error(f"Erro ao listar vídeos: {str(e)}")
             return []
 
-    def load_sample_video(self, video_path: str) -> str:
-        """Carrega um vídeo de exemplo do cache ou pasta local."""
+    def load_sample_video(self, video_url: str) -> str:
+        """Carrega um vídeo de exemplo do dataset ou pasta local."""
         try:
-            if video_path and os.path.exists(video_path):
-                logger.info(f"Carregando vídeo: {video_path}")
-                return video_path
-            logger.warning(f"Vídeo não encontrado: {video_path}")
+            if not video_url:
+                return ""
+                
+            if video_url.startswith('http'):
+                logger.info(f"Carregando vídeo da URL: {video_url}")
+                return video_url
+            elif os.path.exists(video_url):
+                logger.info(f"Carregando vídeo local: {video_url}")
+                return video_url
+                
+            logger.warning(f"Vídeo não encontrado: {video_url}")
             return ""
         except Exception as e:
             logger.error(f"Erro ao carregar vídeo: {str(e)}")
@@ -232,7 +211,7 @@ class GradioInterface:
                         with gr.Row():
                             with gr.Column(scale=4):
                                 gr.Video(
-                                    value=video['path'],
+                                    value=video['url'],
                                     format="mp4",
                                     height=150,
                                     interactive=False,
@@ -244,11 +223,9 @@ class GradioInterface:
                                     size="sm"
                                 ).click(
                                     fn=self.load_sample_video,
-                                    inputs=[gr.State(video['path'])],
+                                    inputs=[gr.State(video['url'])],
                                     outputs=[input_video]
                                 )
-                
-                
             
             # Configurar callback do botão
             submit_btn.click(
