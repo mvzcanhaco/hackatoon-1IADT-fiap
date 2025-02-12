@@ -5,6 +5,9 @@ from pathlib import Path
 from src.application.use_cases.process_video import ProcessVideoUseCase, ProcessVideoRequest
 from src.infrastructure.services.weapon_detector import WeaponDetectorService
 from src.infrastructure.services.notification_services import NotificationServiceFactory
+from huggingface_hub import hf_hub_download, list_repo_files, snapshot_download
+import tempfile
+import shutil
 
 class GradioInterface:
     """Interface Gradio usando Clean Architecture."""
@@ -14,6 +17,9 @@ class GradioInterface:
         self.notification_factory = NotificationServiceFactory()
         self.default_fps = 2 if self.detector.device_type == "GPU" else 1
         self.default_resolution = "640" if self.detector.device_type == "GPU" else "480"
+        self.dataset_id = "marcuscanhaco/weapon-test"  # ID do dataset de teste
+        self.videos_cache_dir = Path(tempfile.gettempdir()) / "weapon_detection_videos"
+        self.is_huggingface = os.getenv('SPACE_ID') is not None
         
         self.use_case = ProcessVideoUseCase(
             detector=self.detector,
@@ -21,37 +27,60 @@ class GradioInterface:
             default_fps=self.default_fps,
             default_resolution=int(self.default_resolution)
         )
+        
+        # Criar diretório de cache se não existir
+        if self.is_huggingface:
+            self.videos_cache_dir.mkdir(parents=True, exist_ok=True)
+    
+    def _download_dataset_videos(self) -> None:
+        """Baixa os vídeos do dataset do Hugging Face."""
+        try:
+            # Baixar todo o dataset para o diretório de cache
+            snapshot_download(
+                repo_id=self.dataset_id,
+                repo_type="dataset",
+                local_dir=str(self.videos_cache_dir),
+                ignore_patterns=["*.git*", "README.md"]
+            )
+        except Exception as e:
+            print(f"Erro ao baixar dataset: {str(e)}")
     
     def list_sample_videos(self) -> list:
-        """Lista os vídeos de exemplo na pasta videos."""
-        video_dir = Path("videos")
-        if not video_dir.exists():
-            os.makedirs(video_dir)
-            return []
-        
-        video_extensions = ['.mp4', '.avi', '.mov', '.mkv']
-        videos = []
-        
-        # Procurar em subdiretórios específicos
-        for status_dir in ['seguro', 'risco_detectado']:
-            dir_path = video_dir / status_dir
-            if dir_path.exists():
-                for ext in video_extensions:
-                    for video_path in dir_path.glob(f'*{ext}'):
-                        videos.append({
-                            'path': str(video_path),
-                            'name': video_path.name,
-                            'ground_truth': '✅ SEGURO (Ground Truth)' if status_dir == 'seguro' else '⚠️ RISCO DETECTADO (Ground Truth)'
-                        })
-        
-        return videos
-    
-    def load_sample_video(self, video_path: str) -> str:
-        """Carrega um vídeo de exemplo."""
+        """Lista os vídeos de exemplo do dataset ou da pasta local."""
         try:
-            return video_path
+            video_extensions = ['.mp4', '.avi', '.mov', '.mkv']
+            videos = []
+            
+            if self.is_huggingface:
+                # No Hugging Face, usar o dataset
+                self._download_dataset_videos()
+                base_dir = self.videos_cache_dir
+            else:
+                # Localmente, usar a pasta videos
+                base_dir = Path("videos")
+                if not base_dir.exists():
+                    os.makedirs(base_dir)
+            
+            # Listar todos os vídeos diretamente
+            for ext in video_extensions:
+                for video_path in base_dir.glob(f'**/*{ext}'):
+                    videos.append({
+                        'path': str(video_path),
+                        'name': video_path.name,
+                        'ground_truth': '📼 Vídeo de Teste'
+                    })
+            
+            return videos
+            
         except Exception as e:
-            return None
+            print(f"Erro ao listar vídeos: {str(e)}")
+            return []
+
+    def load_sample_video(self, video_path: str) -> str:
+        """Carrega um vídeo de exemplo do cache ou pasta local."""
+        if video_path and os.path.exists(video_path):
+            return video_path
+        return ""
     
     def create_interface(self) -> gr.Blocks:
         """Cria a interface Gradio."""
@@ -154,16 +183,14 @@ class GradioInterface:
                 with gr.Group():
                     gr.Markdown("### Vídeos de Exemplo")
                     with gr.Row():
-                        with gr.Column(scale=3):
+                        with gr.Column(scale=4):
                             gr.Markdown("#### Vídeo")
-                        with gr.Column(scale=2):
-                            gr.Markdown("#### Status Real")
                         with gr.Column(scale=1):
                             gr.Markdown("#### Ação")
                     
                     for video in sample_videos:
                         with gr.Row():
-                            with gr.Column(scale=3):
+                            with gr.Column(scale=4):
                                 gr.Video(
                                     value=video['path'],
                                     format="mp4",
@@ -171,8 +198,6 @@ class GradioInterface:
                                     interactive=False,
                                     show_label=False
                                 )
-                            with gr.Column(scale=2, min_width=200):
-                                gr.Markdown(video['ground_truth'])
                             with gr.Column(scale=1, min_width=100):
                                 gr.Button(
                                     "📥 Carregar",

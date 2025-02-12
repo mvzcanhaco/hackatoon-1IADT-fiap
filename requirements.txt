@@ -18,7 +18,7 @@ gradio_client
 h11
 httpcore
 httpx
-huggingface-hub
+huggingface-hub>=0.20.3
 idna
 itsdangerous
 Jinja2
