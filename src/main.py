@@ -15,21 +15,30 @@ logger = logging.getLogger(__name__)
 
 def setup_zero_gpu():
     """Configurações otimizadas para Zero-GPU."""
-    # Forçar inicialização da GPU
-    if is_gpu_available():
-        force_gpu_init()
-        # Limpar cache CUDA
-        torch.cuda.empty_cache()
-        gc.collect()
-    
-        # Configurações para otimizar memória
-        os.environ['PYTORCH_CUDA_ALLOC_CONF'] = 'max_split_size_mb:128'
-        torch.backends.cuda.matmul.allow_tf32 = True
-        torch.backends.cudnn.benchmark = True
-        torch.backends.cudnn.allow_tf32 = True
-        logger.info("Configurações Zero-GPU aplicadas com sucesso")
-    else:
-        logger.warning("GPU não disponível para configuração Zero-GPU")
+    try:
+        # Forçar inicialização da GPU
+        if is_gpu_available():
+            force_gpu_init()
+            # Limpar cache CUDA
+            torch.cuda.empty_cache()
+            gc.collect()
+        
+            # Configurações para otimizar memória
+            os.environ['PYTORCH_CUDA_ALLOC_CONF'] = 'max_split_size_mb:128'
+            torch.backends.cuda.matmul.allow_tf32 = True
+            torch.backends.cudnn.benchmark = True
+            torch.backends.cudnn.allow_tf32 = True
+            
+            # Configurar device map para melhor utilização da memória
+            os.environ['CUDA_VISIBLE_DEVICES'] = '0'
+            torch.cuda.set_per_process_memory_fraction(0.9)  # Usar 90% da memória disponível
+            
+            logger.info(f"Configurações Zero-GPU aplicadas com sucesso na GPU: {torch.cuda.get_device_name(0)}")
+        else:
+            logger.warning("GPU não disponível para configuração Zero-GPU. O sistema operará em modo CPU.")
+    except Exception as e:
+        logger.error(f"Erro ao configurar Zero-GPU: {str(e)}")
+        logger.warning("Fallback para modo CPU devido a erro na configuração da GPU.")
 
 def main():
     """Função principal que inicia a aplicação."""
@@ -58,7 +67,8 @@ def main():
                 logger.info(f"GPU Memory: {gpu_mem:.1f}GB, Max Concurrent: {max_concurrent}")
             else:
                 max_concurrent = 1
-                logger.warning("GPU não disponível, usando configuração mínima")
+                logger.warning("GPU não disponível. O sistema está operando em modo CPU. " +
+                             "Todas as funcionalidades estão disponíveis, mas o processamento será mais lento.")
             
             # Primeiro configurar a fila
             demo = demo.queue(

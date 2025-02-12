@@ -34,13 +34,19 @@ logger = logging.getLogger(__name__)
 def force_gpu_init():
     """Força a inicialização da GPU."""
     try:
-        # Forçar inicialização do CUDA
-        torch.cuda.init()
-        # Alocar e liberar um tensor pequeno para garantir que CUDA está funcionando
-        dummy = torch.cuda.FloatTensor(1)
-        del dummy
-        torch.cuda.empty_cache()
-        return True
+        # Verificar se CUDA está disponível
+        if not torch.cuda.is_available():
+            return False
+            
+        # Tentar alocar um tensor na GPU
+        try:
+            dummy = torch.cuda.FloatTensor(1)
+            del dummy
+            torch.cuda.empty_cache()
+            return True
+        except RuntimeError:
+            return False
+            
     except Exception as e:
         logger.warning(f"Erro ao forçar inicialização da GPU: {str(e)}")
         return False
@@ -48,22 +54,38 @@ def force_gpu_init():
 def is_gpu_available():
     """Verifica se a GPU está disponível de forma mais robusta."""
     try:
+        # Verificar CUDA primeiro
         if not torch.cuda.is_available():
+            logger.warning("CUDA não está disponível")
             return False
         
         # Tentar forçar inicialização
         if not force_gpu_init():
+            logger.warning("Não foi possível inicializar a GPU")
             return False
             
-        # Verificar se há memória disponível
-        gpu_memory = torch.cuda.get_device_properties(0).total_memory
-        if gpu_memory < 4 * (1024**3):  # Mínimo de 4GB
-            logger.warning("GPU encontrada mas com memória insuficiente")
+        # Tentar obter informações da GPU
+        try:
+            device_count = torch.cuda.device_count()
+            if device_count == 0:
+                logger.warning("Nenhuma GPU encontrada")
+                return False
+                
+            # Verificar se podemos realmente usar a GPU
+            device = torch.device('cuda')
+            dummy_tensor = torch.zeros(1, device=device)
+            del dummy_tensor
+            torch.cuda.empty_cache()
+            
+            logger.info(f"GPU disponível: {torch.cuda.get_device_name(0)}")
+            return True
+            
+        except Exception as e:
+            logger.warning(f"Erro ao verificar GPU: {str(e)}")
             return False
             
-        return True
     except Exception as e:
-        logger.warning(f"Erro ao verificar GPU: {str(e)}")
+        logger.warning(f"Erro ao verificar disponibilidade da GPU: {str(e)}")
         return False
 
 class BaseCache:
@@ -342,9 +364,11 @@ class DetectorFactory:
                 logger.info("GPU disponível e inicializada com sucesso")
                 return WeaponDetectorGPU()
             else:
-                logger.warning("GPU não disponível ou com problemas, usando CPU")
+                logger.warning("GPU não disponível ou com problemas. ATENÇÃO: O sistema funcionará em modo CPU, " +
+                             "que é mais lento mas igualmente funcional. Performance será reduzida.")
                 return WeaponDetectorCPU()
         except Exception as e:
             logger.error(f"Erro ao criar detector: {str(e)}")
-            logger.warning("Fallback para CPU devido a erro")
+            logger.warning("Fallback para CPU devido a erro. O sistema continuará funcionando, " +
+                         "mas com performance reduzida.")
             return WeaponDetectorCPU()
