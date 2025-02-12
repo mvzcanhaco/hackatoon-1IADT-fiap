@@ -2,12 +2,6 @@
 
 echo "🚀 Iniciando processo de deploy..."
 
-
-
-# Verificar e criar diretórios necessários
-echo "📁 Verificando estrutura de diretórios..."
-mkdir -p videos/seguro videos/risco_detectado
-
 # Solicitar mensagem do commit
 echo "📝 Digite a mensagem do commit (ou pressione Enter para mensagem padrão):"
 read commit_message
@@ -20,11 +14,7 @@ fi
 # Deploy para GitHub
 echo "🚀 Preparando deploy para GitHub..."
 
-# Salvar estado atual dos vídeos
-echo "📦 Salvando estado dos vídeos..."
-git stash push videos/
-
-# Adicionar alterações exceto vídeos
+# Adicionar alterações exceto vídeos e arquivos grandes
 echo "📦 Adicionando arquivos para GitHub..."
 git add .
 
@@ -35,41 +25,33 @@ if [[ -n $(git status -s) ]]; then
     # Fazer commit
     git commit -m "$commit_message"
     
-    # Push para GitHub
-    echo "🚀 Enviando para GitHub..."
-    git push origin main
+    # Force push para GitHub
+    echo "🚀 Forçando push para GitHub..."
+    git push -f origin main
     
     if [ $? -eq 0 ]; then
         echo "✅ Deploy para GitHub concluído com sucesso!"
     else
         echo "❌ Erro durante o deploy para GitHub"
-        git stash pop  # Restaurar vídeos
         exit 1
     fi
 else
     echo "✨ Workspace limpo, nenhuma alteração para GitHub"
 fi
 
-# Restaurar vídeos
-echo "📦 Restaurando vídeos..."
-git stash pop
-
 # Deploy para Hugging Face
 echo "🚀 Preparando deploy para Hugging Face..."
 
-# Verificar arquivos grandes
-echo "🔍 Verificando arquivos grandes..."
-find . -size +100M -not -path "*.git*" | while read file; do
-    echo "⚠️ Arquivo grande encontrado: $file"
-    echo "Verificando se está configurado no Git LFS..."
-    if ! git check-attr filter "$file" | grep -q "lfs"; then
-        echo "❌ $file não está configurado no Git LFS!"
-        exit 1
-    fi
-done
+# Verificar se o remote do Hugging Face existe
+if ! git remote | grep -q "^space$"; then
+    echo "❌ Remote 'space' não encontrado!"
+    echo "⚠️ Execute os seguintes comandos:"
+    echo "   git remote add space https://huggingface.co/spaces/SEU_USUARIO/NOME_DO_SPACE"
+    exit 1
+fi
 
 # Adicionar todos os arquivos incluindo vídeos
-echo "📦 Adicionando todos os arquivos incluindo vídeos..."
+echo "📦 Adicionando todos os arquivos..."
 git add --all
 
 # Verificar se há alterações para o Hugging Face
@@ -79,9 +61,8 @@ if [[ -n $(git status -s) ]]; then
     # Fazer commit
     git commit -m "$commit_message"
     
-    
     echo "🚀 Enviando para Hugging Face Space..."
-    git push space main
+    git push -f space main
     
     if [ $? -eq 0 ]; then
         echo "✅ Deploy para Hugging Face concluído com sucesso!"
