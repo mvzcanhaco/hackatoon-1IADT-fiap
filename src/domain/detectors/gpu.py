@@ -363,6 +363,65 @@ class WeaponDetectorGPU(BaseDetector):
             logger.error(f"Erro ao obter uso de memória GPU: {str(e)}")
             return 0
 
+    def _apply_nms(self, detections: list, iou_threshold: float = 0.5) -> list:
+        """Aplica Non-Maximum Suppression nas detecções usando operações em GPU."""
+        try:
+            if not detections:
+                return []
+
+            # Converter detecções para tensores na GPU
+            boxes = torch.tensor([[d["box"][0], d["box"][1], d["box"][2], d["box"][3]] for d in detections], device=self.device)
+            scores = torch.tensor([d["confidence"] for d in detections], device=self.device)
+            labels = [d["label"] for d in detections]
+
+            # Calcular áreas dos boxes
+            area = (boxes[:, 2] - boxes[:, 0]) * (boxes[:, 3] - boxes[:, 1])
+            
+            # Ordenar por score
+            _, order = scores.sort(descending=True)
+
+            keep = []
+            while order.numel() > 0:
+                if order.numel() == 1:
+                    keep.append(order.item())
+                    break
+                i = order[0]
+                keep.append(i.item())
+
+                # Calcular IoU com os boxes restantes
+                xx1 = torch.max(boxes[i, 0], boxes[order[1:], 0])
+                yy1 = torch.max(boxes[i, 1], boxes[order[1:], 1])
+                xx2 = torch.min(boxes[i, 2], boxes[order[1:], 2])
+                yy2 = torch.min(boxes[i, 3], boxes[order[1:], 3])
+
+                w = torch.clamp(xx2 - xx1, min=0)
+                h = torch.clamp(yy2 - yy1, min=0)
+                inter = w * h
+
+                # Calcular IoU
+                ovr = inter / (area[i] + area[order[1:]] - inter)
+                
+                # Encontrar boxes com IoU menor que o threshold
+                ids = (ovr <= iou_threshold).nonzero().squeeze()
+                if ids.numel() == 0:
+                    break
+                order = order[ids + 1]
+
+            # Construir lista de detecções filtradas
+            filtered_detections = []
+            for idx in keep:
+                filtered_detections.append({
+                    "confidence": scores[idx].item(),
+                    "box": boxes[idx].tolist(),
+                    "label": labels[idx]
+                })
+
+            return filtered_detections
+
+        except Exception as e:
+            logger.error(f"Erro ao aplicar NMS na GPU: {str(e)}")
+            return []
+
     def _should_clear_cache(self):
         """Determina se o cache deve ser limpo baseado no uso de memória."""
         try:
