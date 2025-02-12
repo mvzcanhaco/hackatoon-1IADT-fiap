@@ -18,7 +18,7 @@ class WeaponDetectorGPU(BaseDetector):
         """Inicializa o detector."""
         super().__init__()
         self.default_resolution = 640
-        self.device = self._get_best_device()
+        self.device = None  # Será configurado em _initialize
         self._initialize()
     
     def _initialize(self):
@@ -28,6 +28,9 @@ class WeaponDetectorGPU(BaseDetector):
             if not torch.cuda.is_available():
                 raise RuntimeError("CUDA não está disponível!")
             
+            # Configurar device corretamente
+            self.device = 0  # Usar índice inteiro para GPU
+            
             # Carregar modelo e processador
             logger.info("Carregando modelo e processador...")
             model_name = "google/owlv2-base-patch16"
@@ -36,8 +39,8 @@ class WeaponDetectorGPU(BaseDetector):
             self.owlv2_model = Owlv2ForObjectDetection.from_pretrained(
                 model_name,
                 torch_dtype=torch.float16,
-                device_map="auto"
-            ).to(self.device)
+                device_map={"": self.device}  # Mapear todo o modelo para GPU 0
+            )
             
             # Otimizar modelo
             self.owlv2_model.eval()
@@ -113,7 +116,7 @@ class WeaponDetectorGPU(BaseDetector):
 
     def _get_best_device(self):
         """Retorna o melhor dispositivo disponível."""
-        return torch.device(0)  # Usar primeira GPU
+        return 0  # Usar índice inteiro para GPU
 
     def _clear_gpu_memory(self):
         """Limpa memória GPU."""
