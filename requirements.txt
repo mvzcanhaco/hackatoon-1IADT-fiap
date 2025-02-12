@@ -67,7 +67,7 @@ tomlkit
 torch
 torchvision
 tqdm
-transformers>=4.49.0.dev0
+transformers==4.48.3
 typer
 typing_extensions
 tzdata
