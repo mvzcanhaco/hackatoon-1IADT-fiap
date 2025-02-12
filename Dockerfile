@@ -30,9 +30,11 @@ RUN python3.10 -m venv $VIRTUAL_ENV
 ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 
 # Instalar dependências Python otimizadas para GPU
-RUN pip install --no-cache-dir -U pip && \
+RUN pip install --no-cache-dir -U pip setuptools wheel && \
     pip install --no-cache-dir torch torchvision --extra-index-url https://download.pytorch.org/whl/cu121 && \
-    pip install --no-cache-dir -r requirements.txt
+    pip install --no-cache-dir -r requirements.txt && \
+    pip install --no-cache-dir --upgrade "tokenizers>=0.15.0" && \
+    pip install --no-cache-dir --upgrade "git+https://github.com/huggingface/transformers.git"
 
 # Criar diretório de vídeos e cache
 RUN mkdir -p /code/videos /code/.cache/huggingface /code/.cache/torch && \
@@ -52,7 +54,9 @@ ENV HOST=0.0.0.0 \
     HUGGINGFACE_HUB_CACHE=/code/.cache/huggingface \
     HF_HOME=/code/.cache/huggingface \
     TORCH_CUDA_ARCH_LIST="7.5" \
-    MAX_WORKERS=2
+    MAX_WORKERS=2 \
+    TRANSFORMERS_OFFLINE=0 \
+    TRANSFORMERS_VERBOSITY=info
 
 # Copiar arquivos do projeto
 COPY . .
