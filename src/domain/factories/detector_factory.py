@@ -31,6 +31,41 @@ load_dotenv()
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+def force_gpu_init():
+    """Força a inicialização da GPU."""
+    try:
+        # Forçar inicialização do CUDA
+        torch.cuda.init()
+        # Alocar e liberar um tensor pequeno para garantir que CUDA está funcionando
+        dummy = torch.cuda.FloatTensor(1)
+        del dummy
+        torch.cuda.empty_cache()
+        return True
+    except Exception as e:
+        logger.warning(f"Erro ao forçar inicialização da GPU: {str(e)}")
+        return False
+
+def is_gpu_available():
+    """Verifica se a GPU está disponível de forma mais robusta."""
+    try:
+        if not torch.cuda.is_available():
+            return False
+        
+        # Tentar forçar inicialização
+        if not force_gpu_init():
+            return False
+            
+        # Verificar se há memória disponível
+        gpu_memory = torch.cuda.get_device_properties(0).total_memory
+        if gpu_memory < 4 * (1024**3):  # Mínimo de 4GB
+            logger.warning("GPU encontrada mas com memória insuficiente")
+            return False
+            
+        return True
+    except Exception as e:
+        logger.warning(f"Erro ao verificar GPU: {str(e)}")
+        return False
+
 class BaseCache:
     """Cache base para armazenar resultados de detecção."""
     def __init__(self, max_size: int = 1000):
@@ -294,3 +329,22 @@ class WeaponDetector:
         gc.collect()
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
+
+class DetectorFactory:
+    """Factory para criar a instância apropriada do detector."""
+    
+    @staticmethod
+    def create_detector() -> BaseDetector:
+        """Cria e retorna a instância apropriada do detector."""
+        try:
+            # Forçar verificação robusta de GPU
+            if is_gpu_available():
+                logger.info("GPU disponível e inicializada com sucesso")
+                return WeaponDetectorGPU()
+            else:
+                logger.warning("GPU não disponível ou com problemas, usando CPU")
+                return WeaponDetectorCPU()
+        except Exception as e:
+            logger.error(f"Erro ao criar detector: {str(e)}")
+            logger.warning("Fallback para CPU devido a erro")
+            return WeaponDetectorCPU()

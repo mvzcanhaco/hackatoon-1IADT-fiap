@@ -4,6 +4,7 @@ from src.presentation.web.gradio_interface import GradioInterface
 import logging
 import torch
 import gc
+from src.domain.factories.detector_factory import force_gpu_init, is_gpu_available
 
 # Configurar logging
 logging.basicConfig(
@@ -14,16 +15,21 @@ logger = logging.getLogger(__name__)
 
 def setup_zero_gpu():
     """Configurações otimizadas para Zero-GPU."""
-    # Limpar cache CUDA
-    if torch.cuda.is_available():
+    # Forçar inicialização da GPU
+    if is_gpu_available():
+        force_gpu_init()
+        # Limpar cache CUDA
         torch.cuda.empty_cache()
         gc.collect()
     
-    # Configurações para otimizar memória
-    os.environ['PYTORCH_CUDA_ALLOC_CONF'] = 'max_split_size_mb:128'
-    torch.backends.cuda.matmul.allow_tf32 = True
-    torch.backends.cudnn.benchmark = True
-    torch.backends.cudnn.allow_tf32 = True
+        # Configurações para otimizar memória
+        os.environ['PYTORCH_CUDA_ALLOC_CONF'] = 'max_split_size_mb:128'
+        torch.backends.cuda.matmul.allow_tf32 = True
+        torch.backends.cudnn.benchmark = True
+        torch.backends.cudnn.allow_tf32 = True
+        logger.info("Configurações Zero-GPU aplicadas com sucesso")
+    else:
+        logger.warning("GPU não disponível para configuração Zero-GPU")
 
 def main():
     """Função principal que inicia a aplicação."""
@@ -46,12 +52,13 @@ def main():
         
         if IS_HUGGINGFACE:
             # Calcular número ideal de workers baseado na GPU
-            if torch.cuda.is_available():
+            if is_gpu_available():
                 gpu_mem = torch.cuda.get_device_properties(0).total_memory / (1024**3)  # em GB
                 max_concurrent = 1  # Forçar single worker para Zero-GPU
                 logger.info(f"GPU Memory: {gpu_mem:.1f}GB, Max Concurrent: {max_concurrent}")
             else:
                 max_concurrent = 1
+                logger.warning("GPU não disponível, usando configuração mínima")
             
             # Primeiro configurar a fila
             demo = demo.queue(
