@@ -21,10 +21,13 @@ torch.backends.cudnn.benchmark = True
 torch.backends.cuda.matmul.allow_fp16_reduced_precision_reduction = True
 torch._dynamo.config.suppress_errors = True
 
+# Configurações para Zero-GPU
+os.environ['PYTORCH_CUDA_ALLOC_CONF'] = 'max_split_size_mb:128'
+
 
 class GPUCache(BaseCache):
     """Cache otimizado para GPU."""
-    def __init__(self, max_size: int = 1000):
+    def __init__(self, max_size: int = 100):  # Reduzido para economizar memória
         super().__init__(max_size)
         self.device = torch.device('cuda')
 
@@ -35,12 +38,12 @@ class WeaponDetectorGPU(BaseDetector):
     def __init__(self):
         """Inicializa variáveis básicas."""
         super().__init__()
-        self.default_resolution = 640
+        self.default_resolution = 512  # Reduzido para economizar memória
         self.amp_dtype = torch.float16
         self.preprocess_stream = torch.cuda.Stream()
-        self.max_batch_size = 16  # Aumentado para 16
-        self.current_batch_size = 8  # Aumentado para 8
-        self.min_batch_size = 2
+        self.max_batch_size = 4  # Reduzido para Zero-GPU
+        self.current_batch_size = 2  # Reduzido para Zero-GPU
+        self.min_batch_size = 1
     
     def _initialize(self):
         """Inicializa o modelo e o processador para execução exclusiva em GPU."""
@@ -64,18 +67,18 @@ class WeaponDetectorGPU(BaseDetector):
                 cache_dir=cache_dir
             )
             
-            # Configurações otimizadas para T4
+            # Configurações otimizadas para Zero-GPU
             self.owlv2_model = Owlv2ForObjectDetection.from_pretrained(
                 model_name,
                 cache_dir=cache_dir,
                 torch_dtype=self.amp_dtype,
                 device_map="auto",
-                low_cpu_mem_usage=True
+                low_cpu_mem_usage=True,
+                max_memory={'cuda:0': '10GB'}  # Limitar uso de memória
             ).to(self.device)
             
             # Otimizar modelo para inferência
             self.owlv2_model.eval()
-            torch.compile(self.owlv2_model)  # Usar torch.compile para otimização
             
             # Usar queries do método base
             self.text_queries = self._get_detection_queries()
