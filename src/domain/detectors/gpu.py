@@ -108,6 +108,8 @@ class WeaponDetectorGPU(BaseDetector):
                             "label": self.text_queries[label]
                         })
             
+            # Aplicar NMS nas detecções
+            detections = self._apply_nms(detections)
             return detections
             
         except Exception as e:
@@ -152,3 +154,84 @@ class WeaponDetectorGPU(BaseDetector):
         except Exception as e:
             logger.error(f"Erro ao processar vídeo: {str(e)}")
             return video_path, metrics
+
+    def _preprocess_image(self, image: Image.Image) -> Image.Image:
+        """Pré-processa a imagem para o formato esperado pelo modelo."""
+        try:
+            # Converter para RGB se necessário
+            if image.mode != 'RGB':
+                image = image.convert('RGB')
+
+            # Redimensionar mantendo proporção
+            target_size = (self.default_resolution, self.default_resolution)
+            if image.size != target_size:
+                ratio = min(target_size[0] / image.size[0], target_size[1] / image.size[1])
+                new_size = tuple(int(dim * ratio) for dim in image.size)
+                image = image.resize(new_size, Image.Resampling.LANCZOS)
+
+                # Adicionar padding se necessário
+                if new_size != target_size:
+                    new_image = Image.new('RGB', target_size, (0, 0, 0))
+                    paste_x = (target_size[0] - new_size[0]) // 2
+                    paste_y = (target_size[1] - new_size[1]) // 2
+                    new_image.paste(image, (paste_x, paste_y))
+                    image = new_image
+
+            return image
+        except Exception as e:
+            logger.error(f"Erro no pré-processamento: {str(e)}")
+            return image
+
+    def _apply_nms(self, detections: list, iou_threshold: float = 0.5) -> list:
+        """Aplica Non-Maximum Suppression nas detecções."""
+        try:
+            if not detections or len(detections) <= 1:
+                return detections
+
+            # Extrair scores e boxes
+            scores = torch.tensor([d["confidence"] for d in detections])
+            boxes = torch.tensor([[d["box"][0], d["box"][1], d["box"][2], d["box"][3]] 
+                                for d in detections])
+
+            # Ordenar por score
+            _, order = scores.sort(descending=True)
+            keep = []
+
+            while order.numel() > 0:
+                if order.numel() == 1:
+                    keep.append(order.item())
+                    break
+
+                i = order[0]
+                keep.append(i.item())
+
+                # Calcular IoU com os boxes restantes
+                box1 = boxes[i]
+                box2 = boxes[order[1:]]
+                
+                # Calcular interseção
+                left = torch.max(box1[0], box2[:, 0])
+                top = torch.max(box1[1], box2[:, 1])
+                right = torch.min(box1[2], box2[:, 2])
+                bottom = torch.min(box1[3], box2[:, 3])
+                
+                width = torch.clamp(right - left, min=0)
+                height = torch.clamp(bottom - top, min=0)
+                inter = width * height
+
+                # Calcular união
+                area1 = (box1[2] - box1[0]) * (box1[3] - box1[1])
+                area2 = (box2[:, 2] - box2[:, 0]) * (box2[:, 3] - box2[:, 1])
+                union = area1 + area2 - inter
+
+                # Calcular IoU
+                iou = inter / union
+                mask = iou <= iou_threshold
+                order = order[1:][mask]
+
+            # Retornar detecções filtradas
+            return [detections[i] for i in keep]
+
+        except Exception as e:
+            logger.error(f"Erro ao aplicar NMS: {str(e)}")
+            return detections
