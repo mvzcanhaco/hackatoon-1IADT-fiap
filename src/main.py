@@ -40,7 +40,7 @@ def main():
             
             # Primeiro configurar a fila
             demo = demo.queue(
-                concurrency_count=1,  # Simplificando para um worker
+                concurrency_limit=max_concurrent,  # Simplificando para um worker
                 api_open=False,
                 status_update_rate="auto"
             )
