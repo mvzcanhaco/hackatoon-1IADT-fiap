@@ -13,7 +13,7 @@ filelock
 Flask
 fsspec
 future
-gradio
+gradio==5.15.0
 gradio_client
 h11
 httpcore

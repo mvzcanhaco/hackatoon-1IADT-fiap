@@ -40,18 +40,15 @@ def main():
             
             # Primeiro configurar a fila
             demo = demo.queue(
-                max_size=16,  # Aumentado para corresponder ao max_batch_size
-                concurrency_limit=max_concurrent,  # Baseado na memória GPU
-                status_update_rate=10,  # Atualizações mais frequentes
+                concurrency_count=1,  # Simplificando para um worker
                 api_open=False,
-                max_batch_size=16  # Aumentado para corresponder ao detector
+                status_update_rate="auto"
             )
             # Depois fazer o launch
             demo.launch(
                 server_name="0.0.0.0",
                 server_port=7860,
-                share=False,
-                max_threads=4  # Limitar threads da CPU
+                share=False
             )
         else:
             # Ambiente local - apenas launch direto
