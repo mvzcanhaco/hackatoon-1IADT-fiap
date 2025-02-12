@@ -8,6 +8,9 @@ from src.infrastructure.services.notification_services import NotificationServic
 from huggingface_hub import hf_hub_download, list_repo_files, snapshot_download
 import tempfile
 import shutil
+import logging
+
+logger = logging.getLogger(__name__)
 
 class GradioInterface:
     """Interface Gradio usando Clean Architecture."""
@@ -31,19 +34,36 @@ class GradioInterface:
         # Criar diretório de cache se não existir
         if self.is_huggingface:
             self.videos_cache_dir.mkdir(parents=True, exist_ok=True)
+            logger.info(f"Diretório de cache criado em: {self.videos_cache_dir}")
     
-    def _download_dataset_videos(self) -> None:
+    def _download_dataset_videos(self) -> bool:
         """Baixa os vídeos do dataset do Hugging Face."""
         try:
-            # Baixar todo o dataset para o diretório de cache
-            snapshot_download(
-                repo_id=self.dataset_id,
-                repo_type="dataset",
-                local_dir=str(self.videos_cache_dir),
-                ignore_patterns=["*.git*", "README.md"]
-            )
+            logger.info(f"Iniciando download do dataset {self.dataset_id}")
+            
+            # Listar arquivos disponíveis no dataset
+            files = list_repo_files(self.dataset_id, repo_type="dataset")
+            logger.info(f"Arquivos encontrados no dataset: {files}")
+            
+            # Baixar cada arquivo de vídeo individualmente
+            for file in files:
+                if file.lower().endswith(('.mp4', '.avi', '.mov', '.mkv')):
+                    try:
+                        local_file = hf_hub_download(
+                            repo_id=self.dataset_id,
+                            filename=file,
+                            repo_type="dataset",
+                            local_dir=str(self.videos_cache_dir)
+                        )
+                        logger.info(f"Arquivo baixado com sucesso: {local_file}")
+                    except Exception as e:
+                        logger.error(f"Erro ao baixar arquivo {file}: {str(e)}")
+            
+            return True
+            
         except Exception as e:
-            print(f"Erro ao baixar dataset: {str(e)}")
+            logger.error(f"Erro ao baixar dataset: {str(e)}")
+            return False
     
     def list_sample_videos(self) -> list:
         """Lista os vídeos de exemplo do dataset ou da pasta local."""
@@ -52,35 +72,55 @@ class GradioInterface:
             videos = []
             
             if self.is_huggingface:
-                # No Hugging Face, usar o dataset
-                self._download_dataset_videos()
-                base_dir = self.videos_cache_dir
+                logger.info("Ambiente Hugging Face detectado, usando dataset")
+                if self._download_dataset_videos():
+                    logger.info(f"Procurando vídeos em: {self.videos_cache_dir}")
+                    # Listar todos os vídeos no diretório de cache
+                    for ext in video_extensions:
+                        for video_path in Path(self.videos_cache_dir).rglob(f'*{ext}'):
+                            logger.info(f"Vídeo encontrado: {video_path}")
+                            videos.append({
+                                'path': str(video_path),
+                                'name': video_path.name,
+                                'ground_truth': '📼 Vídeo de Teste'
+                            })
+                else:
+                    logger.error("Falha ao baixar dataset")
             else:
-                # Localmente, usar a pasta videos
+                logger.info("Ambiente local detectado, usando pasta videos")
                 base_dir = Path("videos")
                 if not base_dir.exists():
                     os.makedirs(base_dir)
+                    logger.info(f"Diretório videos criado: {base_dir}")
+                
+                # Listar vídeos locais
+                for ext in video_extensions:
+                    for video_path in base_dir.glob(f'**/*{ext}'):
+                        logger.info(f"Vídeo local encontrado: {video_path}")
+                        videos.append({
+                            'path': str(video_path),
+                            'name': video_path.name,
+                            'ground_truth': '📼 Vídeo de Teste'
+                        })
             
-            # Listar todos os vídeos diretamente
-            for ext in video_extensions:
-                for video_path in base_dir.glob(f'**/*{ext}'):
-                    videos.append({
-                        'path': str(video_path),
-                        'name': video_path.name,
-                        'ground_truth': '📼 Vídeo de Teste'
-                    })
-            
+            logger.info(f"Total de vídeos encontrados: {len(videos)}")
             return videos
             
         except Exception as e:
-            print(f"Erro ao listar vídeos: {str(e)}")
+            logger.error(f"Erro ao listar vídeos: {str(e)}")
             return []
 
     def load_sample_video(self, video_path: str) -> str:
         """Carrega um vídeo de exemplo do cache ou pasta local."""
-        if video_path and os.path.exists(video_path):
-            return video_path
-        return ""
+        try:
+            if video_path and os.path.exists(video_path):
+                logger.info(f"Carregando vídeo: {video_path}")
+                return video_path
+            logger.warning(f"Vídeo não encontrado: {video_path}")
+            return ""
+        except Exception as e:
+            logger.error(f"Erro ao carregar vídeo: {str(e)}")
+            return ""
     
     def create_interface(self) -> gr.Blocks:
         """Cria a interface Gradio."""
