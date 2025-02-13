@@ -7,7 +7,7 @@ sdk: gradio
 sdk_version: 5.15.0
 app_file: app.py
 pinned: false
-license: mit
+license: apache-2.0
 tags:
   - security
   - computer-vision
@@ -55,7 +55,9 @@ GPU/CPU otimizado.
 - Processamento otimizado em GPU (NVIDIA T4) e CPU
 - Interface web intuitiva com Gradio
 - API REST para integração
-- Suporte a webhooks para notificações
+- Sistema de notificações:
+  - Webhook para integrações personalizadas
+  - E-mail para alertas diretos
 - Métricas detalhadas de processamento
 
 ## Requisitos
@@ -170,7 +172,7 @@ src/
 
 ## Licença
 
-Este projeto está licenciado sob a MIT License - veja o arquivo [LICENSE](LICENSE)
+Este projeto está licenciado sob a Apache License 2.0 - veja o arquivo [LICENSE](LICENSE)
 para detalhes.
 
 ## Contribuição

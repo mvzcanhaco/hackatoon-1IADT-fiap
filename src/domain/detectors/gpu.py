@@ -136,7 +136,6 @@ class WeaponDetectorGPU(BaseDetector):
         gc.collect()
 
     def process_video(self, video_path: str, fps: int = None, threshold: float = 0.3, resolution: int = 640) -> Tuple[str, Dict]:
-        """Processa um vídeo."""
         metrics = {
             "total_time": 0,
             "frame_extraction_time": 0,
@@ -165,7 +164,7 @@ class WeaponDetectorGPU(BaseDetector):
             
             # Processar frames em batch
             t0 = time.time()
-            batch_size = 16  # Aumentado para T4 dedicada
+            batch_size = 8  # Reduzido para evitar erros de memória
             detections_by_frame = []
             
             for i in range(0, len(frames), batch_size):
@@ -179,61 +178,73 @@ class WeaponDetectorGPU(BaseDetector):
                     frame_pil = self._preprocess_image(frame_pil)
                     batch_pil_frames.append(frame_pil)
                 
-                # Processar batch
-                batch_inputs = self.owlv2_processor(
-                    images=batch_pil_frames,
-                    return_tensors="pt",
-                    padding=True
-                )
-                batch_inputs = {
-                    key: val.to(self.device) 
-                    for key, val in batch_inputs.items()
-                }
-                
-                # Inferência em batch
-                with torch.no_grad():
-                    inputs = {**batch_inputs, **self.processed_text}
-                    outputs = self.owlv2_model(**inputs)
+                try:
+                    # Processar batch
+                    batch_inputs = self.owlv2_processor(
+                        images=batch_pil_frames,
+                        return_tensors="pt",
+                        padding=True
+                    )
+                    batch_inputs = {
+                        key: val.to(self.device) 
+                        for key, val in batch_inputs.items()
+                    }
                     
-                    target_sizes = torch.tensor(
-                        [frame.size[::-1] for frame in batch_pil_frames],
-                        device=self.device
-                    )
-                    results = self.owlv2_processor.post_process_grounded_object_detection(
-                        outputs=outputs,
-                        target_sizes=target_sizes,
-                        threshold=threshold
-                    )
-                
-                # Processar resultados do batch
-                for frame_idx, frame_results in enumerate(results):
-                    if len(frame_results["scores"]) > 0:
-                        scores = frame_results["scores"]
-                        boxes = frame_results["boxes"]
-                        labels = frame_results["labels"]
+                    # Inferência em batch
+                    with torch.no_grad():
+                        inputs = {**batch_inputs, **self.processed_text}
+                        outputs = self.owlv2_model(**inputs)
                         
-                        frame_detections = []
-                        for score, box, label in zip(scores, boxes, labels):
-                            score_val = score.item()
-                            if score_val >= threshold:
-                                label_idx = min(label.item(), len(self.text_queries) - 1)
-                                label_text = self.text_queries[label_idx]
-                                frame_detections.append({
-                                    "confidence": round(score_val * 100, 2),
-                                    "box": [int(x) for x in box.tolist()],
-                                    "label": label_text
+                        target_sizes = torch.tensor(
+                            [frame.size[::-1] for frame in batch_pil_frames],
+                            device=self.device
+                        )
+                        results = self.owlv2_processor.post_process_grounded_object_detection(
+                            outputs=outputs,
+                            target_sizes=target_sizes,
+                            threshold=threshold
+                        )
+                    
+                    # Processar resultados do batch
+                    for frame_idx, frame_results in enumerate(results):
+                        if len(frame_results["scores"]) > 0:
+                            scores = frame_results["scores"]
+                            boxes = frame_results["boxes"]
+                            labels = frame_results["labels"]
+                            
+                            frame_detections = []
+                            for score, box, label in zip(scores, boxes, labels):
+                                score_val = score.item()
+                                if score_val >= threshold:
+                                    label_idx = min(label.item(), len(self.text_queries) - 1)
+                                    label_text = self.text_queries[label_idx]
+                                    frame_detections.append({
+                                        "confidence": round(score_val * 100, 2),
+                                        "box": [int(x) for x in box.tolist()],
+                                        "label": label_text,
+                                        "timestamp": (i + frame_idx) / (fps or 2)
+                                    })
+                            
+                            if frame_detections:
+                                frame_detections = self._apply_nms(frame_detections)
+                                detections_by_frame.append({
+                                    "frame": i + frame_idx,
+                                    "detections": frame_detections
                                 })
-                        
-                        if frame_detections:
-                            frame_detections = self._apply_nms(frame_detections)
-                            detections_by_frame.append({
-                                "frame": i + frame_idx,
-                                "detections": frame_detections
-                            })
                 
-                # Liberar memória do batch
-                del batch_inputs, outputs
-                torch.cuda.empty_cache()
+                except RuntimeError as e:
+                    logger.error(f"Erro no processamento do batch: {str(e)}")
+                    if "out of memory" in str(e):
+                        torch.cuda.empty_cache()
+                        gc.collect()
+                    continue
+                    
+                finally:
+                    # Liberar memória do batch
+                    del batch_inputs
+                    if 'outputs' in locals():
+                        del outputs
+                    torch.cuda.empty_cache()
             
             # Atualizar métricas finais
             metrics["analysis_time"] = time.time() - t0

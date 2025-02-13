@@ -190,7 +190,7 @@ class GradioInterface:
                     )
                 
                     submit_btn = gr.Button(
-                        "Analisar Vídeo",
+                        "Detectar",
                         variant="primary",
                         scale=2
                     )
@@ -280,24 +280,24 @@ class GradioInterface:
         response = self.use_case.execute(request)
         
         # Formatar saída para o Gradio
-        status_color = "#ff0000" if response.detections else "#00ff00"
+        status_color = "#ff0000" if response.detection_result.detections else "#00ff00"
         status_html = f"""
         <div style='padding: 1em; background: {status_color}20; border-radius: 8px;'>
             <h3 style='color: {status_color}; margin: 0;'>
-                {"⚠️ RISCO DETECTADO" if response.detections else "✅ SEGURO"}
+                {"⚠️ RISCO DETECTADO" if response.detection_result.detections else "✅ SEGURO"}
             </h3>
             <p style='margin: 0.5em 0;'>
-                Processado em: {response.device_type}<br>
-                Total de detecções: {len(response.detections)}<br>
-                Frames analisados: {response.frames_analyzed}<br>
-                Tempo total: {response.total_time:.2f}s
+                Processado em: {response.detection_result.device_type}<br>
+                Total de detecções: {len(response.detection_result.detections)}<br>
+                Frames analisados: {response.detection_result.frames_analyzed}<br>
+                Tempo total: {response.detection_result.total_time:.2f}s
             </p>
         </div>
         """
         
-        if response.detections:
+        if response.detection_result.detections:
             status_html += "<div style='margin-top: 1em;'><h4>Detecções:</h4><ul>"
-            for det in response.detections[:5]:  # Mostrar até 5 detecções
+            for det in response.detection_result.detections[:5]:  # Mostrar até 5 detecções
                 confidence_pct = det.confidence * 100 if det.confidence <= 1.0 else det.confidence
                 status_html += f"""
                 <li style='margin: 0.5em 0;'>
@@ -305,8 +305,8 @@ class GradioInterface:
                     Confiança: {confidence_pct:.1f}%<br>
                     Frame: {det.frame}
                 </li>"""
-            if len(response.detections) > 5:
-                status_html += f"<li>... e mais {len(response.detections) - 5} detecção(ões)</li>"
+            if len(response.detection_result.detections) > 5:
+                status_html += f"<li>... e mais {len(response.detection_result.detections) - 5} detecção(ões)</li>"
             status_html += "</ul></div>"
         
         return (

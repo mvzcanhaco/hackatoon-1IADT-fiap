@@ -163,11 +163,59 @@ class NewDetector(DetectorInterface):
 ### 3. Sistema de Notificações
 
 ```python
-class NewNotificationService(NotificationService):
-    """Novo serviço de notificação."""
+class NotificationService {
+    """Serviço de notificação abstrato."""
     def send_notification(self):
         # Implementação específica
         pass
+}
+
+class EmailNotification(NotificationService):
+    """Serviço de notificação por e-mail."""
+    def send_notification(self, detection_data: dict, target: str):
+        # Envia e-mail com detalhes da detecção
+        pass
+
+class WebhookNotification(NotificationService):
+    """Serviço de notificação via webhook."""
+    def send_notification(self, detection_data: dict, webhook_url: str):
+        # Envia POST request para o webhook configurado
+        pass
+```
+
+#### Tipos de Notificação Implementados
+
+1. **E-mail**
+   - Envio de alertas por e-mail
+   - Suporte a templates HTML
+   - Detalhes das detecções incluídos
+   - Configurável via variáveis de ambiente
+
+2. **Webhook**
+   - Integração com sistemas externos
+   - Payload JSON customizável
+   - Suporte a autenticação
+   - Headers configuráveis
+   - Retry com backoff exponencial
+
+#### Fluxo de Notificações
+
+```mermaid
+sequenceDiagram
+    participant D as Detector
+    participant NS as NotificationService
+    participant E as EmailService
+    participant W as WebhookService
+    
+    D->>NS: Detecção Encontrada
+    alt Email Configurado
+        NS->>E: Envia Alerta
+        E-->>NS: Status Envio
+    else Webhook Configurado
+        NS->>W: Envia POST
+        W-->>NS: Status Request
+    end
+    NS-->>D: Resultado
 ```
 
 ## Fluxo de Processamento
