@@ -1,4 +1,37 @@
-# Detecção de Armas - FIAP Vision Guard - Hackatoon 1IADT
+---
+title: FIAP VisionGuard - Weapon Detection System
+emoji: 🚨
+colorFrom: red
+colorTo: yellow
+sdk: gradio
+sdk_version: 5.15.0
+app_file: app.py
+pinned: false
+license: mit
+tags:
+  - security
+  - computer-vision
+  - weapon-detection
+  - fiap
+python_version: "3.10"
+app_port: 7860
+---
+
+<div align="center">
+
+# FIAP VisionGuard - Weapon Detection
+
+*Sistema de Detecção de Armas e Objetos Perigosos*
+
+[![Open in Hugging Face][hf-badge]][hf-space]
+[![GitHub][gh-badge]][gh-repo]
+
+[hf-badge]: https://img.shields.io/badge/Hugging%20Face-Spaces-yellow
+[hf-space]: https://huggingface.co/spaces/marcuscanhaco/weapon-detection-app
+[gh-badge]: https://img.shields.io/badge/GitHub-Repo-blue
+[gh-repo]: https://github.com/mvzcanhaco/hackatoon-1IADT-fiap
+
+</div>
 
 ## Sobre o Projeto
 
@@ -15,14 +48,6 @@ O sistema visa otimizar a segurança de estabelecimentos e comércios através d
 
 Sistema de detecção de objetos de risco em vídeos usando OWLV2-ViT e processamento
 GPU/CPU otimizado.
-
-[![Open in Hugging Face][hf-badge]][hf-space]
-[![GitHub][gh-badge]][gh-repo]
-
-[hf-badge]: https://img.shields.io/badge/Hugging%20Face-Spaces-yellow
-[hf-space]: https://huggingface.co/spaces/marcuscanhaco/weapon-detection-app
-[gh-badge]: https://img.shields.io/badge/GitHub-Repo-blue
-[gh-repo]: https://github.com/mvzcanhaco/hackatoon-1IADT-fiap
 
 ## Funcionalidades
 
