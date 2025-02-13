@@ -135,7 +135,7 @@ def main():
                 api_open=False,
                 max_size=queue_size,
                 status_update_rate="auto",
-                concurrency_count=max_concurrent
+                default_concurrency_limit=max_concurrent
             )
             
             # Launch

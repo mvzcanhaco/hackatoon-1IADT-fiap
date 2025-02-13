@@ -22,6 +22,7 @@
 ### Exemplos de Uso
 
 1. **Upload Simples**
+
    ```python
    with gr.Blocks() as demo:
        video_input = gr.Video()
@@ -30,6 +31,7 @@
    ```
 
 2. **Configurações Avançadas**
+
    ```python
    with gr.Blocks() as demo:
        with gr.Row():
@@ -42,6 +44,7 @@
 ### Endpoints
 
 #### 1. Detecção em Vídeo
+
 ```http
 POST /api/detect
 Content-Type: multipart/form-data
@@ -54,6 +57,7 @@ Content-Type: multipart/form-data
 ```
 
 **Resposta:**
+
 ```json
 {
     "detections": [
@@ -78,6 +82,7 @@ Content-Type: multipart/form-data
 ```
 
 #### 2. Status do Serviço
+
 ```http
 GET /api/status
 
@@ -106,6 +111,7 @@ Response:
 ## Webhooks
 
 ### Configuração
+
 ```http
 POST /api/webhooks/configure
 {
@@ -116,6 +122,7 @@ POST /api/webhooks/configure
 ```
 
 ### Formato do Callback
+
 ```json
 {
     "event": "detection",
@@ -131,6 +138,7 @@ POST /api/webhooks/configure
 ## Integração com Outros Serviços
 
 ### 1. Hugging Face
+
 ```python
 from huggingface_hub import HfApi
 
@@ -143,6 +151,7 @@ api.upload_file(
 ```
 
 ### 2. Sistemas de Notificação
+
 ```python
 def notify(detection):
     requests.post(
@@ -164,4 +173,4 @@ def notify(detection):
 3. **Validação de Entrada**
    - Tamanho máximo
    - Formatos permitidos
-   - Sanitização 
+   - Sanitização

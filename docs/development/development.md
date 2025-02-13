@@ -199,4 +199,4 @@ def profile_detection():
 - Multiprocessing
 - NumPy vectorization
 - Cache de resultados
-- Otimização de memória 
+- Otimização de memória

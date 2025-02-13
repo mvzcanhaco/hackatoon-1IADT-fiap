@@ -7,7 +7,74 @@
 O sistema utiliza um modelo de IA (OWL-ViT) para detectar objetos de risco em vídeos.
 O processamento pode ser feito em GPU ou CPU, com otimizações específicas para cada caso.
 
-### Quais objetos são detectados?
+### O que é o OWL-ViT?
+
+O OWL-ViT (Vision Transformer for Open-World Localization) é um modelo de IA que:
+
+- Usa arquitetura Transformer para processar imagens
+- Permite detecção zero-shot de objetos
+- Aceita queries em linguagem natural
+- Não precisa de treinamento específico para novos objetos
+
+### Problemas Conhecidos com OWL-ViT
+
+#### Limitações do Modelo Ensemble
+
+O modelo `owlv2-base-patch16-ensemble` apresenta incompatibilidades com processamento GPU:
+
+- Conflitos com versões estáveis do Transformers
+- Problemas de memória em GPUs com menos de 16GB
+- Instabilidade em batch processing
+
+**Solução Implementada:**
+
+1. Mudança para modelo base: `owlv2-base-patch16`
+2. Atualização do Transformers para branch de desenvolvimento:
+
+    ```bash
+    pip install git+https://github.com/huggingface/transformers.git
+    ```
+
+3. Ajustes nas configurações de memória GPU:
+
+```python
+model = model.to(device='cuda', dtype=torch.float16)
+```
+
+#### Comparação de Versões
+
+1. **Modelo Base**
+   - Mais estável
+   - Menor consumo de memória
+   - Compatível com mais GPUs
+
+2. **Modelo Ensemble**
+   - Maior precisão
+   - Requer mais recursos
+   - Melhor para CPU
+
+### Como fazer queries efetivas para o OWL-ViT?
+
+Para melhores resultados, use estas técnicas:
+
+1. **Seja Específico**
+   - Bom: "uma pistola preta"
+   - Ruim: "arma"
+
+2. **Use Variações**
+   - "uma arma de fogo"
+   - "uma pistola"
+   - "um revólver"
+
+3. **Inclua Contexto**
+   - "uma faca na mão de alguém"
+   - "uma arma apontada"
+
+4. **Descreva Características**
+   - "uma faca com lâmina metálica"
+   - "um rifle com coronha"
+
+### Tipos de Objetos Detectados
 
 #### Armas de Fogo
 
@@ -31,13 +98,13 @@ O processamento pode ser feito em GPU ou CPU, com otimizações específicas par
 
 ### Requisitos de Hardware
 
-#### GPU
+#### Especificações GPU
 
 - NVIDIA T4 16GB (recomendado)
 - CUDA 11.8+
 - 16GB RAM
 
-#### CPU
+#### Especificações CPU
 
 - 8+ cores
 - 32GB RAM
@@ -68,15 +135,15 @@ pip install torch torchvision --extra-index-url https://download.pytorch.org/whl
 
 ## Performance
 
-### Como melhorar a performance?
+### Otimizações de Sistema
 
-#### GPU
+#### Ajustes GPU
 
 - Use batch processing
 - Ative half precision
 - Otimize o cache de modelos
 
-#### CPU
+#### Ajustes CPU
 
 - Ative multiprocessing
 - Use vetorização NumPy
@@ -85,12 +152,12 @@ pip install torch torchvision --extra-index-url https://download.pytorch.org/whl
 ### Configurações Recomendadas
 
 ```plaintext
-# GPU T4
+// Configurações para GPU T4
 GPU_MEMORY_FRACTION=0.9
 BATCH_SIZE=16
 USE_HALF_PRECISION=true
 
-# CPU
+// Configurações para CPU
 MAX_WORKERS=8
 CACHE_SIZE=1000
 USE_MULTIPROCESSING=true
@@ -98,7 +165,7 @@ USE_MULTIPROCESSING=true
 
 ## Deployment
 
-### Como fazer deploy no Hugging Face?
+### Processo de Deploy no Hugging Face
 
 1. Configure as credenciais:
 
@@ -119,7 +186,7 @@ USE_MULTIPROCESSING=true
     ./deploy.sh
     ```
 
-### Monitoramento
+### Sistema de Monitoramento
 
 - Use os logs em `logs/app.log`
 - Monitore GPU com `nvidia-smi`
@@ -127,7 +194,7 @@ USE_MULTIPROCESSING=true
 
 ## Segurança
 
-### Como proteger as credenciais?
+### Gerenciamento de Credenciais
 
 1. Use variáveis de ambiente:
 
@@ -142,4 +209,24 @@ USE_MULTIPROCESSING=true
 
 - Limite o tamanho dos vídeos
 - Verifique formatos permitidos
-- Sanitize inputs 
+- Sanitize inputs
+
+```text
+HUGGINGFACE_TOKEN=seu_token
+GPU_MEMORY_FRACTION=0.9
+MAX_CONCURRENT_REQUESTS=2
+```
+
+```text
+USE_GPU=true
+GPU_DEVICE=0
+```
+
+```text
+USE_GPU=false
+```
+
+```text
+HF_SPACE_ID=seu-espaco
+HF_TOKEN=seu_token
+```

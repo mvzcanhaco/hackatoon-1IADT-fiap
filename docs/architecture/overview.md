@@ -4,6 +4,209 @@
 
 O sistema de detecção de riscos em vídeo é construído seguindo os princípios da Clean Architecture, garantindo separação de responsabilidades e facilitando a manutenção e evolução do código.
 
+## Modelo de IA: OWL-ViT
+
+O OWL-ViT (Vision Transformer for Open-World Localization) é um modelo de visão computacional avançado que combina:
+
+- Transformers para processamento de imagens
+- Zero-shot learning para detecção de objetos
+- Queries em linguagem natural para especificar alvos
+
+### Considerações Técnicas
+
+#### Versões do Modelo
+
+1. **OWL-ViT Base (Atual)**
+
+   ```python
+   model_name = "google/owlv2-base-patch16"
+   ```
+
+   - Compatível com GPU T4
+   - Otimizado para inference
+   - Suporte a half precision
+
+2. **OWL-ViT Ensemble (Descontinuado)**
+
+   ```python
+   model_name = "google/owlv2-base-patch16-ensemble"
+   ```
+
+   - Problemas de compatibilidade GPU
+   - Requer branch dev do Transformers
+   - Maior precisão, mas instável
+
+#### Requisitos Específicos
+
+```python
+# Configurações necessárias para GPU
+torch.backends.cuda.matmul.allow_tf32 = True
+torch.backends.cudnn.benchmark = True
+model = model.half()  # Usar FP16
+
+# Branch específico do Transformers
+# pip install git+https://github.com/huggingface/transformers.git
+```
+
+### Como Funciona
+
+1. **Processamento de Imagem**
+   - Divide a imagem em patches
+   - Processa usando arquitetura Transformer
+   - Gera representações visuais ricas
+
+2. **Sistema de Queries**
+   - Aceita descrições em texto natural
+   - Exemplos de queries efetivas:
+
+     ```python
+     queries = [
+         "uma arma de fogo",
+         "uma pistola",
+         "um rifle",
+         "uma faca",
+         "um objeto pontiagudo perigoso"
+     ]
+     ```
+
+3. **Detecção Zero-shot**
+   - Não requer treinamento específico
+   - Adapta-se a novos objetos
+   - Alta precisão em tempo real
+
+## Clean Architecture
+
+### Camadas
+
+```mermaid
+graph TD
+    A[Presentation] --> B[Application]
+    B --> C[Domain]
+    D[Infrastructure] --> B
+    D --> C
+```
+
+1. **Domain (Núcleo)**
+   - Regras de negócio
+   - Entidades fundamentais
+   - Interfaces abstratas
+
+2. **Application**
+   - Casos de uso
+   - Orquestração
+   - Lógica de aplicação
+
+3. **Infrastructure**
+   - Implementações concretas
+   - Integrações externas
+   - Adaptadores
+
+4. **Presentation**
+   - Interface Gradio
+   - APIs REST
+   - Webhooks
+
+### Diagrama de Classes
+
+```mermaid
+classDiagram
+    class DetectorInterface {
+        <<interface>>
+        +process_video()
+        +detect_objects()
+        +clean_memory()
+    }
+    
+    class WeaponDetectorGPU {
+        -model: OWLViT
+        +process_video()
+        +detect_objects()
+    }
+    
+    class WeaponDetectorCPU {
+        -model: OWLViT
+        +process_video()
+        +detect_objects()
+    }
+    
+    class NotificationService {
+        <<interface>>
+        +send_notification()
+    }
+    
+    DetectorInterface <|-- WeaponDetectorGPU
+    DetectorInterface <|-- WeaponDetectorCPU
+    NotificationService <|-- EmailNotification
+    NotificationService <|-- TelegramNotification
+```
+
+## Extensibilidade
+
+### 1. Novos Modelos de IA
+
+```python
+class NewDetector(DetectorInterface):
+    """Implementação de novo detector."""
+    def process_video(self):
+        # Implementação específica
+        pass
+```
+
+### 2. Suporte a Hardware
+
+- Abstração de hardware via interfaces
+- Fácil adição de novos backends:
+  - TPU
+  - Neural Engine
+  - Outros aceleradores
+
+### 3. Sistema de Notificações
+
+```python
+class NewNotificationService(NotificationService):
+    """Novo serviço de notificação."""
+    def send_notification(self):
+        # Implementação específica
+        pass
+```
+
+## Fluxo de Processamento
+
+```mermaid
+sequenceDiagram
+    participant UI as Interface
+    participant App as Application
+    participant Det as Detector
+    participant Not as Notification
+    
+    UI->>App: Upload Vídeo
+    App->>Det: Processa Vídeo
+    Det->>Det: Extrai Frames
+    loop Cada Frame
+        Det->>Det: Detecta Objetos
+    end
+    Det->>App: Retorna Resultados
+    App->>Not: Envia Notificação
+    App->>UI: Atualiza Interface
+```
+
+## Benefícios da Arquitetura
+
+1. **Desacoplamento**
+   - Mudanças em uma camada não afetam outras
+   - Facilita testes unitários
+   - Permite evolução independente
+
+2. **Manutenibilidade**
+   - Código organizado e previsível
+   - Responsabilidades bem definidas
+   - Fácil localização de problemas
+
+3. **Escalabilidade**
+   - Novos detectores sem mudanças no core
+   - Múltiplos backends de processamento
+   - Sistemas de notificação plugáveis
+
 ## Camadas da Arquitetura
 
 ### 1. Domain (Núcleo)
@@ -104,4 +307,4 @@ graph TD
 ### 3. Open/Closed
 
 - Extensível para novos detectores
-- Fácil adição de novos serviços 
+- Fácil adição de novos serviços

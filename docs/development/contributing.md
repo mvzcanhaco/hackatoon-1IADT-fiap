@@ -12,12 +12,14 @@
      - Python Test Explorer
 
 2. **Configuração do Git**
+
    ```bash
    git config --global user.name "Seu Nome"
    git config --global user.email "seu@email.com"
    ```
 
 3. **Pre-commit Hooks**
+
    ```bash
    pip install pre-commit
    pre-commit install
@@ -26,12 +28,14 @@
 ## Padrões de Código
 
 ### 1. Estilo
+
 - PEP 8
 - Máximo 88 caracteres por linha
 - Docstrings em todas as funções/classes
 - Type hints obrigatórios
 
 Exemplo:
+
 ```python
 def process_frame(
     frame: np.ndarray,
@@ -50,7 +54,8 @@ def process_frame(
 ```
 
 ### 2. Estrutura de Arquivos
-```
+
+```md
 src/
 ├── domain/
 │   ├── entities/
@@ -66,11 +71,13 @@ src/
 ```
 
 ### 3. Testes
+
 - pytest para testes unitários
 - pytest-cov para cobertura
 - Mocking para dependências externas
 
 Exemplo:
+
 ```python
 def test_process_frame():
     detector = WeaponDetector()
@@ -82,23 +89,15 @@ def test_process_frame():
 ## Fluxo de Trabalho
 
 ### 1. Branches
+
 - `main`: Produção
 - `develop`: Desenvolvimento
 - `feature/*`: Novas funcionalidades
 - `fix/*`: Correções
 - `release/*`: Preparação de release
 
-### 2. Commits
-```
-feat: Adiciona detecção em tempo real
-^--^  ^------------------------^
-|     |
-|     +-> Descrição no presente
-|
-+-------> Tipo: feat, fix, docs, style, refactor
-```
+### 2. Pull Requests
 
-### 3. Pull Requests
 - Template obrigatório
 - Code review necessário
 - CI deve passar
@@ -107,6 +106,7 @@ feat: Adiciona detecção em tempo real
 ## CI/CD
 
 ### GitHub Actions
+
 ```yaml
 name: CI
 
@@ -130,12 +130,15 @@ jobs:
 ```
 
 ### Deploy
+
 1. Staging
+
    ```bash
    ./deploy.sh staging
    ```
 
 2. Produção
+
    ```bash
    ./deploy.sh production
    ```
@@ -143,6 +146,7 @@ jobs:
 ## Debugging
 
 ### 1. Logs
+
 ```python
 import logging
 
@@ -151,6 +155,7 @@ logger.info("Processando frame %d", frame_number)
 ```
 
 ### 2. Profiling
+
 ```python
 import cProfile
 
@@ -163,6 +168,7 @@ def profile_detection():
 ```
 
 ### 3. GPU Monitoring
+
 ```python
 import torch
 
@@ -173,11 +179,13 @@ def check_gpu():
 ## Otimizações
 
 ### 1. GPU
+
 - Batch processing
 - Memória pinned
 - Async data loading
 
 ### 2. CPU
+
 - Multiprocessing
 - NumPy vectorization
 - Cache de resultados
@@ -185,11 +193,13 @@ def check_gpu():
 ## Segurança
 
 ### 1. Dependências
+
 - Safety check
 - Dependabot
 - SAST scanning
 
 ### 2. Código
+
 - Input validation
 - Error handling
 - Secrets management
@@ -197,6 +207,7 @@ def check_gpu():
 ## Documentação
 
 ### 1. Docstrings
+
 ```python
 def detect_objects(
     self,
@@ -217,12 +228,14 @@ def detect_objects(
 ```
 
 ### 2. Sphinx
+
 ```bash
 cd docs
 make html
 ```
 
 ### 3. README
+
 - Badges atualizados
 - Exemplos práticos
-- Troubleshooting comum 
+- Troubleshooting comum
