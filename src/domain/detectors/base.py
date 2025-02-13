@@ -155,7 +155,7 @@ class BaseDetector(ABC):
         """Retorna as queries otimizadas para detecção de objetos perigosos."""
         firearms = ["handgun", "rifle", "shotgun", "machine gun", "firearm"]
         edged_weapons = ["knife", "dagger", "machete", "box cutter", "sword"]
-        ranged_weapons = ["crossbow", "bow"]
+        ranged_weapons = ["crossbow", "bow","arrow"]
         sharp_objects = ["blade", "razor", "glass shard", "screwdriver", "metallic pointed object"]
         
         firearm_contexts = ["close-up", "clear view", "detailed"]

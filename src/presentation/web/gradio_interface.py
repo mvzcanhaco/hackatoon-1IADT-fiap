@@ -229,22 +229,22 @@ class GradioInterface:
                         with gr.Column(scale=3):
                             gr.Markdown("#### Vídeo")
                         with gr.Column(scale=1):
-                            gr.Markdown("#### Tipo")
-                        with gr.Column(scale=1):
                             gr.Markdown("#### Ação")
                     
                     for video in sample_videos:
                         with gr.Row():
-                            with gr.Column(scale=3):
-                                gr.Video(
+                            with gr.Column(scale=3):                            
+                                gr.PlayableVideo(                                    
                                     value=video['path'],
                                     format="mp4",
                                     height=150,
-                                    interactive=False,
-                                    show_label=False
-                                )
-                            with gr.Column(scale=1):
-                                gr.Markdown(video['ground_truth'])
+                                    interactive=True,
+                                    show_label=True).click(
+                                    fn=self.load_sample_video,
+                                    inputs=[gr.State(video['path'])],
+                                    outputs=[input_video]
+                                    )
+                                
                             with gr.Column(scale=1, min_width=100):
                                 gr.Button(
                                     "📥 Carregar",

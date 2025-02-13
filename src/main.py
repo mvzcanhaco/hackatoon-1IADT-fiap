@@ -4,6 +4,7 @@ from src.presentation.web.gradio_interface import GradioInterface
 import logging
 import torch
 import gc
+import nvidia_smi
 from src.domain.factories.detector_factory import force_gpu_init, is_gpu_available
 
 # Configurar logging
@@ -13,78 +14,83 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-def check_cuda_environment():
-    """Verifica e configura o ambiente CUDA."""
+def check_gpu_type():
+    """Verifica o tipo de GPU disponível no ambiente Hugging Face."""
     try:
-        # Verificar variáveis de ambiente CUDA
-        cuda_path = os.getenv('CUDA_HOME') or os.getenv('CUDA_PATH')
-        if not cuda_path:
-            logger.warning("Variáveis de ambiente CUDA não encontradas")
-            return False
+        nvidia_smi.nvmlInit()
+        handle = nvidia_smi.nvmlDeviceGetHandleByIndex(0)
+        info = nvidia_smi.nvmlDeviceGetMemoryInfo(handle)
+        gpu_name = nvidia_smi.nvmlDeviceGetName(handle)
+        total_memory = info.total / (1024**3)  # Converter para GB
+        
+        logger.info(f"GPU detectada: {gpu_name}")
+        logger.info(f"Memória total: {total_memory:.2f}GB")
+        
+        # T4 dedicada tem tipicamente 16GB
+        if "T4" in gpu_name and total_memory > 14:
+            return "t4_dedicated"
+        # Zero-GPU compartilhada tem tipicamente menos memória
+        elif total_memory < 14:
+            return "zero_gpu_shared"
+        else:
+            return "unknown"
             
-        # Verificar se CUDA está disponível no PyTorch
-        if not torch.cuda.is_available():
-            logger.warning("PyTorch não detectou CUDA")
-            return False
-            
-        # Tentar obter informações da GPU
-        try:
-            device_count = torch.cuda.device_count()
-            if device_count > 0:
-                device_name = torch.cuda.get_device_name(0)
-                logger.info(f"GPU detectada: {device_name}")
-                return True
-        except Exception as e:
-            logger.warning(f"Erro ao obter informações da GPU: {str(e)}")
-            
-        return False
     except Exception as e:
-        logger.error(f"Erro ao verificar ambiente CUDA: {str(e)}")
-        return False
+        logger.error(f"Erro ao verificar tipo de GPU: {str(e)}")
+        return "unknown"
+    finally:
+        try:
+            nvidia_smi.nvmlShutdown()
+        except:
+            pass
 
-def setup_zero_gpu():
-    """Configurações otimizadas para Zero-GPU."""
+def setup_gpu_environment(gpu_type: str) -> bool:
+    """Configura o ambiente GPU com base no tipo detectado."""
     try:
-        # Verificar ambiente CUDA primeiro
-        if not check_cuda_environment():
-            logger.warning("Ambiente CUDA não está configurado corretamente")
+        # Verificar ambiente CUDA
+        if not torch.cuda.is_available():
+            logger.warning("CUDA não está disponível")
             return False
             
-        # Tentar inicializar GPU
-        if is_gpu_available():
-            # Configurar ambiente
-            os.environ['CUDA_DEVICE_ORDER'] = 'PCI_BUS_ID'
-            os.environ['CUDA_VISIBLE_DEVICES'] = '0'
-            
-            # Limpar memória
-            torch.cuda.empty_cache()
-            gc.collect()
-            
-            # Configurações de memória e performance
-            os.environ['PYTORCH_CUDA_ALLOC_CONF'] = 'max_split_size_mb:128'
+        # Configurações comuns
+        os.environ['CUDA_DEVICE_ORDER'] = 'PCI_BUS_ID'
+        os.environ['CUDA_VISIBLE_DEVICES'] = '0'
+        
+        # Limpar memória
+        torch.cuda.empty_cache()
+        gc.collect()
+        
+        if gpu_type == "t4_dedicated":
+            # Configurações para T4 dedicada
+            logger.info("Configurando para T4 dedicada")
             torch.backends.cuda.matmul.allow_tf32 = True
             torch.backends.cudnn.benchmark = True
             torch.backends.cudnn.allow_tf32 = True
-            
-            # Configurar fração de memória
+            # Usar mais memória pois temos GPU dedicada
             torch.cuda.set_per_process_memory_fraction(0.9)
+            os.environ['PYTORCH_CUDA_ALLOC_CONF'] = 'max_split_size_mb:512'
             
-            # Verificar se a configuração foi bem sucedida
-            try:
-                device = torch.device('cuda')
-                dummy = torch.zeros(1, device=device)
-                del dummy
-                logger.info(f"Configurações Zero-GPU aplicadas com sucesso na GPU: {torch.cuda.get_device_name(0)}")
-                return True
-            except Exception as e:
-                logger.error(f"Erro ao configurar GPU: {str(e)}")
-                return False
-        else:
-            logger.warning("GPU não disponível para configuração Zero-GPU. O sistema operará em modo CPU.")
+        elif gpu_type == "zero_gpu_shared":
+            # Configurações para Zero-GPU compartilhada
+            logger.info("Configurando para Zero-GPU compartilhada")
+            torch.backends.cudnn.benchmark = False
+            # Limitar uso de memória
+            torch.cuda.set_per_process_memory_fraction(0.6)
+            os.environ['PYTORCH_CUDA_ALLOC_CONF'] = 'max_split_size_mb:128'
+            
+        # Verificar configuração
+        try:
+            device = torch.device('cuda')
+            dummy = torch.zeros(1, device=device)
+            del dummy
+            logger.info(f"Configurações GPU aplicadas com sucesso para: {gpu_type}")
+            return True
+        except Exception as e:
+            logger.error(f"Erro ao configurar GPU: {str(e)}")
             return False
+            
     except Exception as e:
-        logger.error(f"Erro ao configurar Zero-GPU: {str(e)}")
-        logger.warning("Fallback para modo CPU devido a erro na configuração da GPU.")
+        logger.error(f"Erro ao configurar ambiente GPU: {str(e)}")
         return False
 
 def main():
@@ -97,7 +103,15 @@ def main():
         if IS_HUGGINGFACE:
             load_dotenv('.env.huggingface')
             logger.info("Ambiente HuggingFace detectado")
-            gpu_available = setup_zero_gpu()
+            
+            # Identificar e configurar GPU
+            gpu_type = check_gpu_type()
+            gpu_available = setup_gpu_environment(gpu_type)
+            
+            if gpu_available:
+                logger.info(f"GPU configurada com sucesso: {gpu_type}")
+            else:
+                logger.warning("GPU não disponível ou não configurada corretamente")
         else:
             load_dotenv('.env')
             logger.info("Ambiente local detectado")
@@ -108,21 +122,20 @@ def main():
         demo = interface.create_interface()
         
         if IS_HUGGINGFACE:
-            # Configurar com base na disponibilidade da GPU
-            if gpu_available:
-                gpu_mem = torch.cuda.get_device_properties(0).total_memory / (1024**3)
-                max_concurrent = 1  # Forçar single worker para Zero-GPU
-                logger.info(f"GPU Memory: {gpu_mem:.1f}GB, Max Concurrent: {max_concurrent}")
+            # Configurar com base no tipo de GPU
+            if gpu_type == "t4_dedicated":
+                max_concurrent = 2  # T4 pode lidar com mais requisições
+                queue_size = 10
             else:
-                max_concurrent = 1
-                logger.warning("GPU não disponível. O sistema está operando em modo CPU. " +
-                             "Todas as funcionalidades estão disponíveis, mas o processamento será mais lento.")
+                max_concurrent = 1  # Zero-GPU precisa ser mais conservadora
+                queue_size = 5
             
             # Configurar fila
             demo = demo.queue(
                 api_open=False,
+                max_size=queue_size,
                 status_update_rate="auto",
-                max_size=5  # Reduzir tamanho da fila para economizar memória
+                concurrency_count=max_concurrent
             )
             
             # Launch
@@ -130,7 +143,7 @@ def main():
                 server_name="0.0.0.0",
                 server_port=7860,
                 share=False,
-                max_threads=2  # Reduzir número de threads
+                max_threads=max_concurrent
             )
         else:
             demo.launch(

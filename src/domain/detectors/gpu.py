@@ -9,6 +9,7 @@ from PIL import Image
 from typing import List, Dict, Any, Tuple
 from transformers import Owlv2Processor, Owlv2ForObjectDetection
 from .base import BaseDetector
+import time
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +49,8 @@ class WeaponDetectorGPU(BaseDetector):
             
             # Processar queries
             self.text_queries = self._get_detection_queries()
+            logger.info(f"Queries carregadas: {self.text_queries}")  # Log das queries
+            
             self.processed_text = self.owlv2_processor(
                 text=self.text_queries,
                 return_tensors="pt",
@@ -101,12 +104,17 @@ class WeaponDetectorGPU(BaseDetector):
                 labels = results["labels"]
                 
                 for score, box, label in zip(scores, boxes, labels):
-                    if score.item() >= threshold:
+                    score_val = score.item()
+                    if score_val >= threshold:
+                        # Garantir que o índice está dentro dos limites
+                        label_idx = min(label.item(), len(self.text_queries) - 1)
+                        label_text = self.text_queries[label_idx]
                         detections.append({
-                            "confidence": score.item(),
+                            "confidence": round(score_val * 100, 2),  # Converter para porcentagem
                             "box": [int(x) for x in box.tolist()],
-                            "label": self.text_queries[label]
+                            "label": label_text
                         })
+                        logger.debug(f"Detecção: {label_text} ({score_val * 100:.2f}%)")
             
             # Aplicar NMS nas detecções
             detections = self._apply_nms(detections)
@@ -131,25 +139,59 @@ class WeaponDetectorGPU(BaseDetector):
         """Processa um vídeo."""
         metrics = {
             "total_time": 0,
+            "frame_extraction_time": 0,
+            "analysis_time": 0,
             "frames_analyzed": 0,
+            "video_duration": 0,
+            "device_type": "GPU",
             "detections": []
         }
         
         try:
+            start_time = time.time()
+            
+            # Extrair frames
+            t0 = time.time()
             frames = self.extract_frames(video_path, fps or 2, resolution)
+            metrics["frame_extraction_time"] = time.time() - t0
             metrics["frames_analyzed"] = len(frames)
             
+            if not frames:
+                logger.warning("Nenhum frame extraído do vídeo")
+                return video_path, metrics
+            
+            # Calcular duração do vídeo
+            metrics["video_duration"] = len(frames) / (fps or 2)
+            
+            # Processar frames
+            t0 = time.time()
             for i, frame in enumerate(frames):
                 frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                 frame_pil = Image.fromarray(frame_rgb)
                 
                 detections = self.detect_objects(frame_pil, threshold)
-                if detections:
+                
+                # Filtrar apenas detecções válidas (sem filtrar unknown)
+                valid_detections = [
+                    {
+                        "confidence": d["confidence"],
+                        "box": d["box"],
+                        "label": d["label"],
+                        "timestamp": i / (fps or 2)
+                    }
+                    for d in detections
+                    if d["confidence"] > threshold
+                ]
+                
+                if valid_detections:
                     metrics["detections"].append({
                         "frame": i,
-                        "detections": detections
+                        "detections": valid_detections
                     })
-                    return video_path, metrics
+            
+            # Atualizar métricas finais
+            metrics["analysis_time"] = time.time() - t0
+            metrics["total_time"] = time.time() - start_time
             
             return video_path, metrics
             
