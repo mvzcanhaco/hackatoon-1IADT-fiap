@@ -24,7 +24,6 @@ class WeaponDetectorGPU(BaseDetector):
         self._initialize()
     
     def _initialize(self):
-        """Inicializa o modelo."""
         try:
             # Configurar device
             if not torch.cuda.is_available():
@@ -55,11 +54,7 @@ class WeaponDetectorGPU(BaseDetector):
                 text=self.text_queries,
                 return_tensors="pt",
                 padding=True
-            )
-            self.processed_text = {
-                key: val.to(self.device) 
-                for key, val in self.processed_text.items()
-            }
+            ).to(self.device)
             
             logger.info("Inicialização GPU completa!")
             self._initialized = True
@@ -78,16 +73,11 @@ class WeaponDetectorGPU(BaseDetector):
             image_inputs = self.owlv2_processor(
                 images=image,
                 return_tensors="pt"
-            )
-            image_inputs = {
-                key: val.to(self.device) 
-                for key, val in image_inputs.items()
-            }
+            ).to(self.device)
             
             # Inferência
             with torch.no_grad():
-                inputs = {**image_inputs, **self.processed_text}
-                outputs = self.owlv2_model(**inputs)
+                outputs = self.owlv2_model(**{**image_inputs, **self.processed_text})
                 
                 target_sizes = torch.tensor([image.size[::-1]], device=self.device)
                 results = self.owlv2_processor.post_process_grounded_object_detection(
@@ -99,26 +89,19 @@ class WeaponDetectorGPU(BaseDetector):
             # Processar detecções
             detections = []
             if len(results["scores"]) > 0:
-                scores = results["scores"]
-                boxes = results["boxes"]
-                labels = results["labels"]
-                
-                for score, box, label in zip(scores, boxes, labels):
+                for score, box, label in zip(results["scores"], results["boxes"], results["labels"]):
                     score_val = score.item()
                     if score_val >= threshold:
-                        # Garantir que o índice está dentro dos limites
                         label_idx = min(label.item(), len(self.text_queries) - 1)
-                        label_text = self.text_queries[label_idx]
                         detections.append({
-                            "confidence": round(score_val * 100, 2),  # Converter para porcentagem
+                            "confidence": round(score_val * 100, 2),
                             "box": [int(x) for x in box.tolist()],
-                            "label": label_text
+                            "label": self.text_queries[label_idx]
                         })
-                        logger.debug(f"Detecção: {label_text} ({score_val * 100:.2f}%)")
+                        logger.debug(f"Detecção: {self.text_queries[label_idx]} ({score_val * 100:.2f}%)")
             
             # Aplicar NMS nas detecções
-            detections = self._apply_nms(detections)
-            return detections
+            return self._apply_nms(detections)
             
         except Exception as e:
             logger.error(f"Erro em detect_objects: {str(e)}")
@@ -136,6 +119,7 @@ class WeaponDetectorGPU(BaseDetector):
         gc.collect()
 
     def process_video(self, video_path: str, fps: int = None, threshold: float = 0.3, resolution: int = 640) -> Tuple[str, Dict]:
+        """Processa um vídeo para detecção de objetos."""
         metrics = {
             "total_time": 0,
             "frame_extraction_time": 0,
@@ -175,80 +159,7 @@ class WeaponDetectorGPU(BaseDetector):
             
             # Processar frames
             t0 = time.time()
-            detections_by_frame = []
-            
-            # Pré-alocar tensores para evitar alocações frequentes
-            with torch.cuda.device(self.device):
-                torch.cuda.empty_cache()
-                
-            for i, frame in enumerate(frames):
-                try:
-                    # Preparar frame
-                    frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                    frame_pil = Image.fromarray(frame_rgb)
-                    frame_pil = self._preprocess_image(frame_pil)
-                    
-                    # Processar frame
-                    inputs = self.owlv2_processor(
-                        images=frame_pil,
-                        return_tensors="pt"
-                    )
-                    inputs = {
-                        key: val.to(self.device) 
-                        for key, val in inputs.items()
-                    }
-                    
-                    # Inferência
-                    with torch.no_grad():
-                        model_inputs = {**inputs, **self.processed_text}
-                        outputs = self.owlv2_model(**model_inputs)
-                        
-                        target_sizes = torch.tensor([frame_pil.size[::-1]], device=self.device)
-                        results = self.owlv2_processor.post_process_grounded_object_detection(
-                            outputs=outputs,
-                            target_sizes=target_sizes,
-                            threshold=threshold
-                        )[0]
-                        
-                        # Processar resultados
-                        if len(results["scores"]) > 0:
-                            scores = results["scores"]
-                            boxes = results["boxes"]
-                            labels = results["labels"]
-                            
-                            frame_detections = []
-                            for score, box, label in zip(scores, boxes, labels):
-                                score_val = score.item()
-                                if score_val >= threshold:
-                                    label_idx = min(label.item(), len(self.text_queries) - 1)
-                                    label_text = self.text_queries[label_idx]
-                                    frame_detections.append({
-                                        "confidence": round(score_val * 100, 2),
-                                        "box": [int(x) for x in box.tolist()],
-                                        "label": label_text,
-                                        "frame": i,
-                                        "timestamp": i / (fps or 2)
-                                    })
-                            
-                            if frame_detections:
-                                frame_detections = self._apply_nms(frame_detections)
-                                detections_by_frame.extend(frame_detections)
-                    
-                except Exception as e:
-                    logger.error(f"Erro ao processar frame {i}: {str(e)}")
-                    continue
-                    
-                finally:
-                    # Liberar memória
-                    if 'inputs' in locals():
-                        del inputs
-                    if 'outputs' in locals():
-                        del outputs
-                    torch.cuda.empty_cache()
-                    
-                # Log de progresso
-                if i % 10 == 0:
-                    logger.info(f"Processados {i}/{len(frames)} frames")
+            detections_by_frame = self._process_frames(frames, fps, threshold)
             
             # Atualizar métricas finais
             metrics["analysis_time"] = time.time() - t0
@@ -260,6 +171,68 @@ class WeaponDetectorGPU(BaseDetector):
         except Exception as e:
             logger.error(f"Erro ao processar vídeo: {str(e)}")
             return video_path, metrics
+
+    def _process_frames(self, frames: List[np.ndarray], fps: int, threshold: float) -> List[Dict]:
+        """Processa frames do vídeo para detecção."""
+        detections_by_frame = []
+        
+        for i, frame in enumerate(frames):
+            try:
+                # Preparar frame
+                frame_pil = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
+                frame_pil = self._preprocess_image(frame_pil)
+                
+                # Processar frame
+                inputs = self.owlv2_processor(
+                    images=frame_pil,
+                    return_tensors="pt"
+                ).to(self.device)
+                
+                # Inferência
+                with torch.no_grad():
+                    outputs = self.owlv2_model(**{**inputs, **self.processed_text})
+                    target_sizes = torch.tensor([frame_pil.size[::-1]], device=self.device)
+                    results = self.owlv2_processor.post_process_grounded_object_detection(
+                        outputs=outputs,
+                        target_sizes=target_sizes,
+                        threshold=threshold
+                    )[0]
+                    
+                    # Processar resultados
+                    if len(results["scores"]) > 0:
+                        frame_detections = []
+                        for score, box, label in zip(results["scores"], results["boxes"], results["labels"]):
+                            score_val = score.item()
+                            if score_val >= threshold:
+                                label_idx = min(label.item(), len(self.text_queries) - 1)
+                                frame_detections.append({
+                                    "confidence": round(score_val * 100, 2),
+                                    "box": [int(x) for x in box.tolist()],
+                                    "label": self.text_queries[label_idx],
+                                    "frame": i,
+                                    "timestamp": i / (fps or 2)
+                                })
+                        
+                        if frame_detections:
+                            detections_by_frame.extend(self._apply_nms(frame_detections))
+                
+            except Exception as e:
+                logger.error(f"Erro ao processar frame {i}: {str(e)}")
+                continue
+                
+            finally:
+                # Liberar memória
+                if 'inputs' in locals():
+                    del inputs
+                if 'outputs' in locals():
+                    del outputs
+                torch.cuda.empty_cache()
+                
+            # Log de progresso
+            if i % 10 == 0:
+                logger.info(f"Processados {i}/{len(frames)} frames")
+        
+        return detections_by_frame
 
     def _preprocess_image(self, image: Image.Image) -> Image.Image:
         """Pré-processa a imagem para o formato esperado pelo modelo."""

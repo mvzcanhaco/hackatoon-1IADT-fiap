@@ -15,25 +15,22 @@ class WeaponDetectorService(DetectorInterface):
     
     def __init__(self):
         try:
-            # Usar o Factory Pattern do domínio para criar o detector apropriado
-            self.detector = WeaponDetector.get_instance()  # Usar get_instance ao invés do construtor direto
+            self.detector = WeaponDetector.get_instance()
             if not self.detector:
                 raise RuntimeError("Falha ao criar o detector")
                 
             self.device_type = "GPU" if torch.cuda.is_available() else "CPU"
             logger.info(f"Detector inicializado em modo {self.device_type}")
             
-            # Manter referência à implementação específica para otimizações
-            if hasattr(self.detector, '_instance') and self.detector._instance is not None:
-                self._specific_detector = self.detector._instance
-            else:
-                self._specific_detector = self.detector
+            self._specific_detector = (
+                self.detector._instance 
+                if hasattr(self.detector, '_instance') and self.detector._instance is not None 
+                else self.detector
+            )
                 
-            # Verificar se o detector foi inicializado corretamente
             if not hasattr(self._specific_detector, 'process_video'):
                 raise RuntimeError("Detector não possui método process_video")
                 
-            # Garantir que o detector está inicializado
             if hasattr(self._specific_detector, 'initialize'):
                 self._specific_detector.initialize()
                 
@@ -53,7 +50,6 @@ class WeaponDetectorService(DetectorInterface):
             if not self._specific_detector:
                 raise RuntimeError("Detector não inicializado")
                 
-            # Garantir que o detector está inicializado
             if hasattr(self._specific_detector, 'initialize'):
                 self._specific_detector.initialize()
                 
@@ -68,7 +64,6 @@ class WeaponDetectorService(DetectorInterface):
                 logger.warning("Nenhuma métrica retornada pelo detector")
                 metrics = {}
             
-            # Converter detecções para entidades do domínio
             detections = []
             for detection in metrics.get('detections', []):
                 try:
@@ -82,7 +77,6 @@ class WeaponDetectorService(DetectorInterface):
                 except Exception as e:
                     logger.error(f"Erro ao processar detecção: {str(e)}")
             
-            # Criar resultado com informações técnicas
             result = DetectionResult(
                 video_path=output_path or video_path,
                 detections=detections,
@@ -121,7 +115,6 @@ class WeaponDetectorService(DetectorInterface):
             if hasattr(self._specific_detector, 'clean_memory'):
                 self._specific_detector.clean_memory()
                 
-            # Forçar coleta de lixo
             gc.collect()
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()
@@ -180,7 +173,6 @@ class WeaponDetectorService(DetectorInterface):
             return self._get_empty_cache_stats()
             
     def _get_empty_cache_stats(self) -> dict:
-        """Retorna estatísticas vazias do cache."""
         return {
             "cache_size": 0,
             "max_size": 0,
