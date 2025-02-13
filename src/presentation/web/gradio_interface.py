@@ -295,18 +295,21 @@ class GradioInterface:
                     "frames_analyzed": response.detection_result.frames_analyzed,
                     "total_time": round(response.detection_result.total_time, 2),
                     "frame_extraction_time": round(response.detection_result.frame_extraction_time, 2),
-                    "analysis_time": round(response.detection_result.analysis_time, 2)
+                    "analysis_time": round(response.detection_result.analysis_time, 2),
+                    "fps": fps,
+                    "resolution": resolution
                 },
-                "detections": []
+                "detections": [],
+                "cache_stats": response.cache_stats if hasattr(response, 'cache_stats') else {}
             }
             
-            # Adicionar detecções ao JSON
-            for det in response.detection_result.detections[:10]:  # Limitar a 10 detecções
+            # Adicionar detecções ao JSON com informações temporais
+            for det in response.detection_result.detections[:10]:
                 technical_data["detections"].append({
                     "label": det.label,
                     "confidence": round(det.confidence * 100 if det.confidence <= 1.0 else det.confidence, 2),
                     "frame": det.frame,
-                    "timestamp": round(det.timestamp, 2) if hasattr(det, "timestamp") else None,
+                    "timestamp": f"{int(det.timestamp // 60):02d}:{int(det.timestamp % 60):02d}",
                     "box": det.box if hasattr(det, "box") else None
                 })
             

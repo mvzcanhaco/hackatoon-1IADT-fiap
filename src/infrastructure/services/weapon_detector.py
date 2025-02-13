@@ -70,20 +70,19 @@ class WeaponDetectorService(DetectorInterface):
             
             # Converter detecções para entidades do domínio
             detections = []
-            for detection_group in metrics.get('detections', []):
-                frame = detection_group.get('frame', 0)
-                for det in detection_group.get('detections', []):
-                    try:
-                        detections.append(Detection(
-                            frame=frame,
-                            confidence=det.get('confidence', 0.0),
-                            label=det.get('label', 'objeto perigoso'),  # Valor padrão mais informativo
-                            box=det.get('box', [0, 0, 0, 0]),
-                            timestamp=frame / fps if fps else 0
-                        ))
-                    except Exception as e:
-                        logger.error(f"Erro ao processar detecção: {str(e)}")
+            for detection in metrics.get('detections', []):
+                try:
+                    detections.append(Detection(
+                        frame=detection.get('frame', 0),
+                        confidence=detection.get('confidence', 0.0),
+                        label=detection.get('label', 'objeto perigoso'),
+                        box=detection.get('box', [0, 0, 0, 0]),
+                        timestamp=detection.get('frame', 0) / fps if fps else 0
+                    ))
+                except Exception as e:
+                    logger.error(f"Erro ao processar detecção: {str(e)}")
             
+            # Criar resultado com informações técnicas
             result = DetectionResult(
                 video_path=output_path or video_path,
                 detections=detections,

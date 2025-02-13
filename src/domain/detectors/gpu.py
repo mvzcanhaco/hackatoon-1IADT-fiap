@@ -143,7 +143,14 @@ class WeaponDetectorGPU(BaseDetector):
             "frames_analyzed": 0,
             "video_duration": 0,
             "device_type": "GPU",
-            "detections": []
+            "detections": [],
+            "technical": {
+                "model": "owlv2-base-patch16",
+                "input_size": f"{resolution}x{resolution}",
+                "nms_threshold": 0.5,
+                "preprocessing": "optimized",
+                "early_stop": False
+            }
         }
         
         try:
@@ -166,7 +173,7 @@ class WeaponDetectorGPU(BaseDetector):
             # Calcular duração do vídeo
             metrics["video_duration"] = len(frames) / (fps or 2)
             
-            # Processar frames individualmente
+            # Processar frames
             t0 = time.time()
             detections_by_frame = []
             
