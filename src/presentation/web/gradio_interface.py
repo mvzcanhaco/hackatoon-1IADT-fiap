@@ -1,6 +1,6 @@
 import gradio as gr
 import os
-from typing import Tuple, Any
+from typing import Tuple, Any, Dict
 from pathlib import Path
 from src.application.use_cases.process_video import ProcessVideoUseCase, ProcessVideoRequest
 from src.infrastructure.services.weapon_detector import WeaponDetectorService
@@ -259,74 +259,89 @@ class GradioInterface:
         resolution: str = None,
         notification_type: str = None,
         notification_target: str = None
-    ) -> Tuple[str, Any]:
+    ) -> Tuple[str, Dict[str, Any]]:
         """Processa o vídeo usando o caso de uso."""
-        if not video_path:
-            return "Erro: Nenhum vídeo fornecido", {}
+        try:
+            if not video_path:
+                return "Erro: Nenhum vídeo fornecido", {}
+                
+            # Usar valores padrão se não especificados
+            fps = fps or self.default_fps
+            resolution = resolution or self.default_resolution
             
-        # Usar valores padrão se não especificados
-        fps = fps or self.default_fps
-        resolution = resolution or self.default_resolution
-        
-        request = ProcessVideoRequest(
-            video_path=video_path,
-            threshold=threshold,
-            fps=fps,
-            resolution=int(resolution),
-            notification_type=notification_type,
-            notification_target=notification_target
-        )
-        
-        response = self.use_case.execute(request)
-        
-        # Formatar saída para o Gradio
-        status_color = "#ff0000" if response.detection_result.detections else "#00ff00"
-        status_html = f"""
-        <div style='padding: 1em; background: {status_color}20; border-radius: 8px;'>
-            <h3 style='color: {status_color}; margin: 0;'>
-                {"⚠️ RISCO DETECTADO" if response.detection_result.detections else "✅ SEGURO"}
-            </h3>
-            <p style='margin: 0.5em 0;'>
-                Processado em: {response.detection_result.device_type}<br>
-                Total de detecções: {len(response.detection_result.detections)}<br>
-                Frames analisados: {response.detection_result.frames_analyzed}<br>
-                Tempo total: {response.detection_result.total_time:.2f}s
-            </p>
-        </div>
-        """
-        
-        if response.detection_result.detections:
-            status_html += "<div style='margin-top: 1em;'><h4>Detecções:</h4><ul>"
-            for det in response.detection_result.detections[:5]:  # Mostrar até 5 detecções
-                confidence_pct = det.confidence * 100 if det.confidence <= 1.0 else det.confidence
-                status_html += f"""
-                <li style='margin: 0.5em 0;'>
-                    <strong>{det.label}</strong><br>
-                    Confiança: {confidence_pct:.1f}%<br>
-                    Frame: {det.frame}
-                </li>"""
-            if len(response.detection_result.detections) > 5:
-                status_html += f"<li>... e mais {len(response.detection_result.detections) - 5} detecção(ões)</li>"
-            status_html += "</ul></div>"
-        
-        # Preparar JSON técnico
-        technical_data = {
-            "device_type": response.detection_result.device_type,
-            "total_detections": len(response.detection_result.detections),
-            "frames_analyzed": response.detection_result.frames_analyzed,
-            "total_time": round(response.detection_result.total_time, 2),
-            "detections": [
-                {
+            request = ProcessVideoRequest(
+                video_path=video_path,
+                threshold=threshold,
+                fps=fps,
+                resolution=int(resolution),
+                notification_type=notification_type,
+                notification_target=notification_target
+            )
+            
+            response = self.use_case.execute(request)
+            
+            # Formatar mensagem de status
+            status_msg = self._format_status_message(response.detection_result)
+            
+            # Preparar JSON técnico
+            technical_data = {
+                "device_info": {
+                    "type": response.detection_result.device_type,
+                    "memory": response.memory_info,
+                    "details": response.device_info
+                },
+                "processing_stats": {
+                    "total_detections": len(response.detection_result.detections),
+                    "frames_analyzed": response.detection_result.frames_analyzed,
+                    "total_time": round(response.detection_result.total_time, 2),
+                    "frame_extraction_time": round(response.detection_result.frame_extraction_time, 2),
+                    "analysis_time": round(response.detection_result.analysis_time, 2)
+                },
+                "detections": []
+            }
+            
+            # Adicionar detecções ao JSON
+            for det in response.detection_result.detections[:10]:  # Limitar a 10 detecções
+                technical_data["detections"].append({
                     "label": det.label,
                     "confidence": round(det.confidence * 100 if det.confidence <= 1.0 else det.confidence, 2),
                     "frame": det.frame,
-                    "timestamp": round(det.timestamp, 2) if hasattr(det, "timestamp") else None
-                }
-                for det in response.detection_result.detections[:10]  # Limitar a 10 detecções no JSON
-            ]
-        }
-        
-        return (
-            response.status_message,
-            technical_data  # Retorna dicionário Python em vez de HTML
-        ) 
+                    "timestamp": round(det.timestamp, 2) if hasattr(det, "timestamp") else None,
+                    "box": det.box if hasattr(det, "box") else None
+                })
+            
+            return status_msg, technical_data
+            
+        except Exception as e:
+            logger.error(f"Erro ao processar vídeo: {str(e)}")
+            return "Erro ao processar o vídeo. Por favor, tente novamente.", {
+                "error": str(e),
+                "device_type": "unknown",
+                "total_detections": 0,
+                "frames_analyzed": 0
+            }
+            
+    def _format_status_message(self, result) -> str:
+        """Formata a mensagem de status do processamento."""
+        try:
+            status = "⚠️ RISCO DETECTADO" if result.detections else "✅ SEGURO"
+            
+            message = f"""Status: {status}
+Processado em: {result.device_type}
+Total de detecções: {len(result.detections)}
+Frames analisados: {result.frames_analyzed}
+Tempo total: {result.total_time:.2f}s"""
+
+            if result.detections:
+                message += "\n\nDetecções encontradas:"
+                for i, det in enumerate(result.detections[:5], 1):
+                    confidence_pct = det.confidence * 100 if det.confidence <= 1.0 else det.confidence
+                    message += f"\n{i}. {det.label} (Confiança: {confidence_pct:.1f}%, Frame: {det.frame})"
+                if len(result.detections) > 5:
+                    message += f"\n... e mais {len(result.detections) - 5} detecção(ões)"
+            
+            return message
+            
+        except Exception as e:
+            logger.error(f"Erro ao formatar mensagem de status: {str(e)}")
+            return "Erro ao processar o vídeo. Por favor, tente novamente." 

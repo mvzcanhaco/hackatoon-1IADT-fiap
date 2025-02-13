@@ -164,7 +164,7 @@ class WeaponDetectorGPU(BaseDetector):
             
             # Processar frames em batch
             t0 = time.time()
-            batch_size = 4  # Reduzido para evitar erros de shape
+            batch_size = 2  # Reduzido ainda mais para garantir compatibilidade
             detections_by_frame = []
             
             for i in range(0, len(frames), batch_size):
@@ -185,17 +185,74 @@ class WeaponDetectorGPU(BaseDetector):
                         return_tensors="pt",
                         padding=True
                     )
+                    
+                    # Validar shapes antes da inferência
+                    if not self._validate_batch_shapes(batch_inputs):
+                        logger.warning(f"Shape inválido detectado no batch {i}, processando frames individualmente...")
+                        # Processar frames individualmente
+                        for frame_idx, frame_pil in enumerate(batch_pil_frames):
+                            try:
+                                single_input = self.owlv2_processor(
+                                    images=frame_pil,
+                                    return_tensors="pt"
+                                )
+                                single_input = {
+                                    key: val.to(self.device) 
+                                    for key, val in single_input.items()
+                                }
+                                
+                                with torch.no_grad():
+                                    inputs = {**single_input, **self.processed_text}
+                                    outputs = self.owlv2_model(**inputs)
+                                    
+                                    target_sizes = torch.tensor([frame_pil.size[::-1]], device=self.device)
+                                    results = self.owlv2_processor.post_process_grounded_object_detection(
+                                        outputs=outputs,
+                                        target_sizes=target_sizes,
+                                        threshold=threshold
+                                    )
+                                    
+                                    if len(results[0]["scores"]) > 0:
+                                        scores = results[0]["scores"]
+                                        boxes = results[0]["boxes"]
+                                        labels = results[0]["labels"]
+                                        
+                                        frame_detections = []
+                                        for score, box, label in zip(scores, boxes, labels):
+                                            score_val = score.item()
+                                            if score_val >= threshold:
+                                                label_idx = min(label.item(), len(self.text_queries) - 1)
+                                                label_text = self.text_queries[label_idx]
+                                                frame_detections.append({
+                                                    "confidence": round(score_val * 100, 2),
+                                                    "box": [int(x) for x in box.tolist()],
+                                                    "label": label_text,
+                                                    "frame": i + frame_idx,
+                                                    "timestamp": (i + frame_idx) / (fps or 2)
+                                                })
+                                        
+                                        if frame_detections:
+                                            frame_detections = self._apply_nms(frame_detections)
+                                            detections_by_frame.extend(frame_detections)
+                                            
+                            except Exception as e:
+                                logger.error(f"Erro ao processar frame individual {i + frame_idx}: {str(e)}")
+                                continue
+                                
+                            finally:
+                                if 'single_input' in locals():
+                                    del single_input
+                                if 'outputs' in locals():
+                                    del outputs
+                                torch.cuda.empty_cache()
+                        continue
+                    
+                    # Processar batch normalmente
                     batch_inputs = {
                         key: val.to(self.device) 
                         for key, val in batch_inputs.items()
                     }
                     
-                    # Validar shapes antes da inferência
-                    if not self._validate_batch_shapes(batch_inputs):
-                        logger.warning(f"Shape inválido detectado no batch {i}, pulando...")
-                        continue
-                    
-                    # Inferência em batch
                     with torch.no_grad():
                         inputs = {**batch_inputs, **self.processed_text}
                         outputs = self.owlv2_model(**inputs)
