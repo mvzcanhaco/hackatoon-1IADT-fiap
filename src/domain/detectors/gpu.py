@@ -6,6 +6,7 @@ import gc
 import numpy as np
 import cv2
 from PIL import Image
+from typing import List, Dict, Any, Tuple
 from transformers import Owlv2Processor, Owlv2ForObjectDetection
 from .base import BaseDetector
 
@@ -29,7 +30,7 @@ class WeaponDetectorGPU(BaseDetector):
                 raise RuntimeError("CUDA não está disponível!")
             
             # Configurar device corretamente
-            self.device = 0  # Usar índice inteiro para GPU
+            self.device = torch.device("cuda:0")  # Usar device CUDA
             
             # Carregar modelo e processador
             logger.info("Carregando modelo e processador...")
@@ -39,7 +40,7 @@ class WeaponDetectorGPU(BaseDetector):
             self.owlv2_model = Owlv2ForObjectDetection.from_pretrained(
                 model_name,
                 torch_dtype=torch.float16,
-                device_map={"": self.device}  # Mapear todo o modelo para GPU 0
+                device_map={"": 0}  # Mapear todo o modelo para GPU 0
             )
             
             # Otimizar modelo
@@ -64,12 +65,11 @@ class WeaponDetectorGPU(BaseDetector):
             logger.error(f"Erro na inicialização GPU: {str(e)}")
             raise
 
-    def detect_objects(self, image: Image.Image, threshold: float = 0.3) -> list:
+    def detect_objects(self, image: Image.Image, threshold: float = 0.3) -> List[Dict]:
         """Detecta objetos em uma imagem."""
         try:
             # Pré-processar imagem
-            if image.mode != 'RGB':
-                image = image.convert('RGB')
+            image = self._preprocess_image(image)
             
             # Processar imagem
             image_inputs = self.owlv2_processor(
@@ -116,16 +116,18 @@ class WeaponDetectorGPU(BaseDetector):
             logger.error(f"Erro em detect_objects: {str(e)}")
             return []
 
-    def _get_best_device(self):
+    def _get_best_device(self) -> torch.device:
         """Retorna o melhor dispositivo disponível."""
-        return 0  # Usar índice inteiro para GPU
+        if torch.cuda.is_available():
+            return torch.device("cuda:0")
+        return torch.device("cpu")
 
     def _clear_gpu_memory(self):
         """Limpa memória GPU."""
         torch.cuda.empty_cache()
         gc.collect()
 
-    def process_video(self, video_path: str, fps: int = None, threshold: float = 0.3, resolution: int = 640) -> tuple:
+    def process_video(self, video_path: str, fps: int = None, threshold: float = 0.3, resolution: int = 640) -> Tuple[str, Dict]:
         """Processa um vídeo."""
         metrics = {
             "total_time": 0,
@@ -182,16 +184,16 @@ class WeaponDetectorGPU(BaseDetector):
             logger.error(f"Erro no pré-processamento: {str(e)}")
             return image
 
-    def _apply_nms(self, detections: list, iou_threshold: float = 0.5) -> list:
+    def _apply_nms(self, detections: List[Dict], iou_threshold: float = 0.5) -> List[Dict]:
         """Aplica Non-Maximum Suppression nas detecções."""
         try:
             if not detections or len(detections) <= 1:
                 return detections
 
             # Extrair scores e boxes
-            scores = torch.tensor([d["confidence"] for d in detections])
+            scores = torch.tensor([d["confidence"] for d in detections], device=self.device)
             boxes = torch.tensor([[d["box"][0], d["box"][1], d["box"][2], d["box"][3]] 
-                                for d in detections])
+                                for d in detections], device=self.device)
 
             # Ordenar por score
             _, order = scores.sort(descending=True)
