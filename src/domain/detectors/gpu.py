@@ -166,24 +166,19 @@ class WeaponDetectorGPU(BaseDetector):
             # Calcular duração do vídeo
             metrics["video_duration"] = len(frames) / (fps or 2)
             
-            # Processar frames em batch
+            # Processar frames individualmente
             t0 = time.time()
-            batch_size = 1  # Processar um frame por vez para garantir compatibilidade
             detections_by_frame = []
             
             # Pré-alocar tensores para evitar alocações frequentes
             with torch.cuda.device(self.device):
-                torch.cuda.empty_cache()  # Limpar memória antes de começar
+                torch.cuda.empty_cache()
                 
-            for i in range(0, len(frames)):
+            for i, frame in enumerate(frames):
                 try:
-                    # Preparar frame com otimização de memória
-                    frame = frames[i]
-                    if isinstance(frame, np.ndarray):
-                        frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                        frame_pil = Image.fromarray(frame_rgb)
-                    else:
-                        frame_pil = frame
+                    # Preparar frame
+                    frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                    frame_pil = Image.fromarray(frame_rgb)
                     frame_pil = self._preprocess_image(frame_pil)
                     
                     # Processar frame
@@ -206,13 +201,13 @@ class WeaponDetectorGPU(BaseDetector):
                             outputs=outputs,
                             target_sizes=target_sizes,
                             threshold=threshold
-                        )
+                        )[0]
                         
                         # Processar resultados
-                        if len(results[0]["scores"]) > 0:
-                            scores = results[0]["scores"]
-                            boxes = results[0]["boxes"]
-                            labels = results[0]["labels"]
+                        if len(results["scores"]) > 0:
+                            scores = results["scores"]
+                            boxes = results["boxes"]
+                            labels = results["labels"]
                             
                             frame_detections = []
                             for score, box, label in zip(scores, boxes, labels):
@@ -231,7 +226,7 @@ class WeaponDetectorGPU(BaseDetector):
                             if frame_detections:
                                 frame_detections = self._apply_nms(frame_detections)
                                 detections_by_frame.extend(frame_detections)
-                
+                    
                 except Exception as e:
                     logger.error(f"Erro ao processar frame {i}: {str(e)}")
                     continue
@@ -258,28 +253,6 @@ class WeaponDetectorGPU(BaseDetector):
         except Exception as e:
             logger.error(f"Erro ao processar vídeo: {str(e)}")
             return video_path, metrics
-
-    def _validate_batch_shapes(self, batch_inputs: Dict) -> bool:
-        """Valida os shapes dos tensores do batch."""
-        try:
-            pixel_values = batch_inputs.get("pixel_values")
-            if pixel_values is None:
-                return False
-                
-            batch_size = pixel_values.shape[0]
-            if batch_size == 0:
-                return False
-                
-            # Validar dimensões esperadas
-            expected_dims = 4  # [batch_size, channels, height, width]
-            if len(pixel_values.shape) != expected_dims:
-                return False
-                
-            return True
-            
-        except Exception as e:
-            logger.error(f"Erro ao validar shapes do batch: {str(e)}")
-            return False
 
     def _preprocess_image(self, image: Image.Image) -> Image.Image:
         """Pré-processa a imagem para o formato esperado pelo modelo."""

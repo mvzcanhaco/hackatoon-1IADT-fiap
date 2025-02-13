@@ -232,6 +232,7 @@ sequenceDiagram
     Det->>Det: Extrai Frames
     loop Cada Frame
         Det->>Det: Detecta Objetos
+        Det->>Det: Limpa Memória
     end
     Det->>App: Retorna Resultados
     App->>Not: Envia Notificação
@@ -251,7 +252,7 @@ sequenceDiagram
    - Fácil localização de problemas
 
 3. **Escalabilidade**
-   - Novos detectores sem mudanças no core
+   - Processamento frame a frame confiável
    - Múltiplos backends de processamento
    - Sistemas de notificação plugáveis
 
@@ -317,15 +318,18 @@ sequenceDiagram
 
 ### GPU
 
-- Detecção automática de hardware
-- Configurações específicas para T4 e Zero-GPU
-- Gerenciamento de memória otimizado
+- Processamento frame a frame otimizado
+- Memória pinned
+- Async data loading
+- Cache de modelos e frames
+- Gerenciamento eficiente de memória
 
 ### CPU
 
-- Fallback automático
-- Otimizações para processamento em CPU
+- Processamento sequencial otimizado
+- NumPy vectorization
 - Cache de resultados
+- Otimização de memória
 
 ## Diagrama de Componentes
 

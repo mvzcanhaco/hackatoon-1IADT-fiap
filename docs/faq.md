@@ -5,7 +5,7 @@
 ### Como o sistema funciona?
 
 O sistema utiliza um modelo de IA (OWL-ViT) para detectar objetos de risco em vídeos.
-O processamento pode ser feito em GPU ou CPU, com otimizações específicas para cada caso.
+O processamento é feito frame a frame em GPU ou CPU, com otimizações específicas para cada caso.
 
 ### O que é o OWL-ViT?
 
@@ -41,17 +41,73 @@ O modelo `owlv2-base-patch16-ensemble` apresenta incompatibilidades com processa
 model = model.to(device='cuda', dtype=torch.float16)
 ```
 
-#### Comparação de Versões
+#### Problemas com Batch Processing
 
-1. **Modelo Base**
-   - Mais estável
-   - Menor consumo de memória
-   - Compatível com mais GPUs
+O processamento em batch apresenta instabilidades conhecidas:
 
-2. **Modelo Ensemble**
-   - Maior precisão
-   - Requer mais recursos
-   - Melhor para CPU
+1. **Erros de Shape**
+   ```
+   ERROR: shape '[4, 21, 512]' is invalid for input of size 44544
+   ERROR: shape '[2, 43, 512]' is invalid for input of size 44544
+   ```
+
+2. **Causas Identificadas**
+   - Inconsistência no padding de imagens em batch
+   - Variações no tamanho dos tensores de entrada
+   - Incompatibilidade com certas configurações de GPU
+
+3. **Solução Recomendada**
+   ```python
+   # Processamento seguro frame a frame
+   batch_size = 1  # Processa um frame por vez
+   ```
+
+4. **Benefícios do Processamento Individual**
+   - Maior estabilidade
+   - Melhor gerenciamento de memória
+   - Resultados mais consistentes
+   - Facilidade de debug
+   - Menor chance de OOM (Out of Memory)
+
+5. **Trade-offs**
+   - Performance levemente reduzida
+   - Processamento mais serializado
+   - Maior tempo total de execução
+
+#### Comparação de Abordagens
+
+| Aspecto | Batch Processing | Frame a Frame |
+|---------|------------------|---------------|
+| Velocidade | Mais rápido (quando funciona) | Mais lento |
+| Estabilidade | Baixa | Alta |
+| Uso de Memória | Alto/Imprevisível | Baixo/Consistente |
+| Confiabilidade | Baixa | Alta |
+| Debug | Difícil | Fácil |
+
+#### Recomendações de Uso
+
+1. **Produção**
+   ```python
+   # Configuração recomendada para produção
+   batch_size = 1
+   resolution = 640
+   fps = 2
+   ```
+
+2. **Desenvolvimento**
+   ```python
+   # Configuração para testes
+   batch_size = 1
+   resolution = 480
+   fps = 1
+   ```
+
+3. **Monitoramento**
+   ```python
+   # Log de progresso a cada 10 frames
+   if i % 10 == 0:
+       logger.info(f"Processados {i}/{len(frames)} frames")
+   ```
 
 ### Como fazer queries efetivas para o OWL-ViT?
 
@@ -129,8 +185,8 @@ pip install torch torchvision --extra-index-url https://download.pytorch.org/whl
 
 **Solução**:
 
-- Reduza o tamanho do batch
-- Diminua a resolução
+- Use processamento frame a frame (padrão)
+- Diminua a resolução se necessário
 - Ajuste `GPU_MEMORY_FRACTION` no `.env`
 
 ## Performance
@@ -139,13 +195,14 @@ pip install torch torchvision --extra-index-url https://download.pytorch.org/whl
 
 #### Ajustes GPU
 
-- Use batch processing
+- Processamento frame a frame otimizado
 - Ative half precision
-- Otimize o cache de modelos
+- Otimize o cache de modelos e frames
+- Gerenciamento eficiente de memória
 
 #### Ajustes CPU
 
-- Ative multiprocessing
+- Processamento sequencial otimizado
 - Use vetorização NumPy
 - Implemente cache de resultados
 
@@ -154,7 +211,7 @@ pip install torch torchvision --extra-index-url https://download.pytorch.org/whl
 ```plaintext
 // Configurações para GPU T4
 GPU_MEMORY_FRACTION=0.9
-BATCH_SIZE=16
+BATCH_SIZE=1  # Processamento frame a frame
 USE_HALF_PRECISION=true
 
 // Configurações para CPU
@@ -162,6 +219,13 @@ MAX_WORKERS=8
 CACHE_SIZE=1000
 USE_MULTIPROCESSING=true
 ```
+
+### Sistema de Monitoramento
+
+- Use os logs em `logs/app.log` para acompanhar o processamento frame a frame
+- Monitore GPU com `nvidia-smi`
+- Verifique métricas no Hugging Face
+- Acompanhe logs de progresso a cada 10 frames
 
 ## Deployment
 
