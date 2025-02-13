@@ -19,7 +19,7 @@ app_port: 7860
 
 <div align="center">
 
-# FIAP VisionGuard - Weapon Detection
+# FIAP VisionGuard - Risk Detection - Hackatoon 1IADT
 
 *Sistema de Detecção de Armas e Objetos Perigosos*
 

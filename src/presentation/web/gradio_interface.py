@@ -127,7 +127,7 @@ class GradioInterface:
     
     def create_interface(self) -> gr.Blocks:
         """Cria a interface Gradio."""
-        title = "Detector de Riscos em Vídeos"
+        title = "FIAP VisionGuard - Risk Detection - Hackatoon 1IADT"
         sample_videos = self.list_sample_videos()
         
         with gr.Blocks(
@@ -135,7 +135,7 @@ class GradioInterface:
             theme=gr.themes.Ocean(),
             css="footer {display: none !important}"
         ) as demo:
-            gr.Markdown(f"""# 🚨 {title}
+            gr.Markdown(f"""# 🎯 {title} 🔪🔫
             
             Faça upload de um vídeo para detectar objetos perigosos.
             Opcionalmente, configure notificações para receber alertas em caso de detecções.
@@ -309,7 +309,24 @@ class GradioInterface:
                 status_html += f"<li>... e mais {len(response.detection_result.detections) - 5} detecção(ões)</li>"
             status_html += "</ul></div>"
         
+        # Preparar JSON técnico
+        technical_data = {
+            "device_type": response.detection_result.device_type,
+            "total_detections": len(response.detection_result.detections),
+            "frames_analyzed": response.detection_result.frames_analyzed,
+            "total_time": round(response.detection_result.total_time, 2),
+            "detections": [
+                {
+                    "label": det.label,
+                    "confidence": round(det.confidence * 100 if det.confidence <= 1.0 else det.confidence, 2),
+                    "frame": det.frame,
+                    "timestamp": round(det.timestamp, 2) if hasattr(det, "timestamp") else None
+                }
+                for det in response.detection_result.detections[:10]  # Limitar a 10 detecções no JSON
+            ]
+        }
+        
         return (
             response.status_message,
-            status_html
+            technical_data  # Retorna dicionário Python em vez de HTML
         ) 

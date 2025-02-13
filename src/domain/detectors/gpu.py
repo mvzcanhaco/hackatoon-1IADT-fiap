@@ -164,21 +164,21 @@ class WeaponDetectorGPU(BaseDetector):
             
             # Processar frames em batch
             t0 = time.time()
-            batch_size = 8  # Reduzido para evitar erros de memória
+            batch_size = 4  # Reduzido para evitar erros de shape
             detections_by_frame = []
             
             for i in range(0, len(frames), batch_size):
-                batch_frames = frames[i:i + batch_size]
-                batch_pil_frames = []
-                
-                # Preparar batch
-                for frame in batch_frames:
-                    frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                    frame_pil = Image.fromarray(frame_rgb)
-                    frame_pil = self._preprocess_image(frame_pil)
-                    batch_pil_frames.append(frame_pil)
-                
                 try:
+                    batch_frames = frames[i:i + batch_size]
+                    batch_pil_frames = []
+                    
+                    # Preparar batch
+                    for frame in batch_frames:
+                        frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                        frame_pil = Image.fromarray(frame_rgb)
+                        frame_pil = self._preprocess_image(frame_pil)
+                        batch_pil_frames.append(frame_pil)
+                    
                     # Processar batch
                     batch_inputs = self.owlv2_processor(
                         images=batch_pil_frames,
@@ -189,6 +189,11 @@ class WeaponDetectorGPU(BaseDetector):
                         key: val.to(self.device) 
                         for key, val in batch_inputs.items()
                     }
+                    
+                    # Validar shapes antes da inferência
+                    if not self._validate_batch_shapes(batch_inputs):
+                        logger.warning(f"Shape inválido detectado no batch {i}, pulando...")
+                        continue
                     
                     # Inferência em batch
                     with torch.no_grad():
@@ -222,18 +227,16 @@ class WeaponDetectorGPU(BaseDetector):
                                         "confidence": round(score_val * 100, 2),
                                         "box": [int(x) for x in box.tolist()],
                                         "label": label_text,
+                                        "frame": i + frame_idx,
                                         "timestamp": (i + frame_idx) / (fps or 2)
                                     })
                             
                             if frame_detections:
                                 frame_detections = self._apply_nms(frame_detections)
-                                detections_by_frame.append({
-                                    "frame": i + frame_idx,
-                                    "detections": frame_detections
-                                })
+                                detections_by_frame.extend(frame_detections)
                 
                 except RuntimeError as e:
-                    logger.error(f"Erro no processamento do batch: {str(e)}")
+                    logger.error(f"Erro no processamento do batch {i}: {str(e)}")
                     if "out of memory" in str(e):
                         torch.cuda.empty_cache()
                         gc.collect()
@@ -256,6 +259,28 @@ class WeaponDetectorGPU(BaseDetector):
         except Exception as e:
             logger.error(f"Erro ao processar vídeo: {str(e)}")
             return video_path, metrics
+
+    def _validate_batch_shapes(self, batch_inputs: Dict) -> bool:
+        """Valida os shapes dos tensores do batch."""
+        try:
+            pixel_values = batch_inputs.get("pixel_values")
+            if pixel_values is None:
+                return False
+                
+            batch_size = pixel_values.shape[0]
+            if batch_size == 0:
+                return False
+                
+            # Validar dimensões esperadas
+            expected_dims = 4  # [batch_size, channels, height, width]
+            if len(pixel_values.shape) != expected_dims:
+                return False
+                
+            return True
+            
+        except Exception as e:
+            logger.error(f"Erro ao validar shapes do batch: {str(e)}")
+            return False
 
     def _preprocess_image(self, image: Image.Image) -> Image.Image:
         """Pré-processa a imagem para o formato esperado pelo modelo."""
