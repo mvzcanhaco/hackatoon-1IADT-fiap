@@ -279,7 +279,37 @@ class GradioInterface:
         
         response = self.use_case.execute(request)
         
+        # Formatar saída para o Gradio
+        status_color = "#ff0000" if response.detections else "#00ff00"
+        status_html = f"""
+        <div style='padding: 1em; background: {status_color}20; border-radius: 8px;'>
+            <h3 style='color: {status_color}; margin: 0;'>
+                {"⚠️ RISCO DETECTADO" if response.detections else "✅ SEGURO"}
+            </h3>
+            <p style='margin: 0.5em 0;'>
+                Processado em: {response.device_type}<br>
+                Total de detecções: {len(response.detections)}<br>
+                Frames analisados: {response.frames_analyzed}<br>
+                Tempo total: {response.total_time:.2f}s
+            </p>
+        </div>
+        """
+        
+        if response.detections:
+            status_html += "<div style='margin-top: 1em;'><h4>Detecções:</h4><ul>"
+            for det in response.detections[:5]:  # Mostrar até 5 detecções
+                confidence_pct = det.confidence * 100 if det.confidence <= 1.0 else det.confidence
+                status_html += f"""
+                <li style='margin: 0.5em 0;'>
+                    <strong>{det.label}</strong><br>
+                    Confiança: {confidence_pct:.1f}%<br>
+                    Frame: {det.frame}
+                </li>"""
+            if len(response.detections) > 5:
+                status_html += f"<li>... e mais {len(response.detections) - 5} detecção(ões)</li>"
+            status_html += "</ul></div>"
+        
         return (
             response.status_message,
-            response.detection_result.__dict__
+            status_html
         ) 

@@ -144,10 +144,11 @@ Tempo de análise: {result.analysis_time:.2f}s"""
             # Adicionar detalhes das detecções se houver
             if result.detections:
                 message += "\n\nDetecções encontradas:"
-                for i, det in enumerate(result.detections[:3], 1):  # Mostrar até 3 detecções
-                    message += f"\n{i}. {det.label} (Confiança: {det.confidence:.1%}, Frame: {det.frame})"
-                if len(result.detections) > 3:
-                    message += f"\n... e mais {len(result.detections) - 3} detecção(ões)"
+                for i, det in enumerate(result.detections[:5], 1):  # Mostrar até 5 detecções
+                    confidence_pct = det.confidence * 100 if det.confidence <= 1.0 else det.confidence
+                    message += f"\n{i}. {det.label} (Confiança: {confidence_pct:.1f}%, Frame: {det.frame})"
+                if len(result.detections) > 5:
+                    message += f"\n... e mais {len(result.detections) - 5} detecção(ões)"
             
             return message
             

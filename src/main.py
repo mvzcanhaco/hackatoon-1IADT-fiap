@@ -61,19 +61,22 @@ def setup_gpu_environment(gpu_type: str) -> bool:
         gc.collect()
         
         if gpu_type == "t4_dedicated":
-            # Configurações para T4 dedicada
+            # Configurações otimizadas para T4 dedicada
             logger.info("Configurando para T4 dedicada")
             torch.backends.cuda.matmul.allow_tf32 = True
             torch.backends.cudnn.benchmark = True
             torch.backends.cudnn.allow_tf32 = True
-            # Usar mais memória pois temos GPU dedicada
-            torch.cuda.set_per_process_memory_fraction(0.9)
-            os.environ['PYTORCH_CUDA_ALLOC_CONF'] = 'max_split_size_mb:512'
+            torch.backends.cudnn.enabled = True
+            torch.backends.cudnn.deterministic = False
+            # Aumentar fração de memória e tamanho do split
+            torch.cuda.set_per_process_memory_fraction(0.95)  # Aumentado para 95%
+            os.environ['PYTORCH_CUDA_ALLOC_CONF'] = 'max_split_size_mb:1024'  # Aumentado para 1GB
             
         elif gpu_type == "zero_gpu_shared":
             # Configurações para Zero-GPU compartilhada
             logger.info("Configurando para Zero-GPU compartilhada")
             torch.backends.cudnn.benchmark = False
+            torch.backends.cudnn.deterministic = True
             # Limitar uso de memória
             torch.cuda.set_per_process_memory_fraction(0.6)
             os.environ['PYTORCH_CUDA_ALLOC_CONF'] = 'max_split_size_mb:128'

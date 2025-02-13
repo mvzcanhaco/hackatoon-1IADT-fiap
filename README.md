@@ -1,29 +1,28 @@
----
-title: Weapon Detection App
-emoji: 🚨
-colorFrom: red
-colorTo: yellow
-sdk: gradio
-sdk_version: 5.15.0
-app_file: app.py
-pinned: false
-license: mit
-hardware: true
-resources:
-  accelerator: T4
-  gpu: true
----
+# Detecção de Armas - FIAP Vision Guard - Hackatoon 1IADT
 
-Sistema de detecção de objetos de risco em vídeos usando OWL-ViT e processamento
+## Sobre o Projeto
+
+A FIAP VisionGuard é uma empresa especializada em monitoramento de câmeras de segurança que busca inovar através da implementação de tecnologias avançadas de detecção de riscos. Este projeto demonstra a viabilidade de uma nova funcionalidade que utiliza Inteligência Artificial para identificar objetos potencialmente perigosos em tempo real, como armas brancas (facas, tesouras e similares) e outros objetos de risco.
+
+### Objetivo
+
+O sistema visa otimizar a segurança de estabelecimentos e comércios através de:
+
+- Detecção automática de objetos perigosos
+- Emissão de alertas em tempo real para centrais de segurança
+- Análise contínua de feeds de vídeo
+- Redução do tempo de resposta a incidentes
+
+Sistema de detecção de objetos de risco em vídeos usando OWLV2-ViT e processamento
 GPU/CPU otimizado.
 
 [![Open in Hugging Face][hf-badge]][hf-space]
 [![GitHub][gh-badge]][gh-repo]
 
 [hf-badge]: https://img.shields.io/badge/Hugging%20Face-Spaces-yellow
-[hf-space]: https://huggingface.co/spaces/seu-usuario/seu-espaco
+[hf-space]: https://huggingface.co/spaces/marcuscanhaco/weapon-detection-app
 [gh-badge]: https://img.shields.io/badge/GitHub-Repo-blue
-[gh-repo]: https://github.com/seu-usuario/hackatoon-1iadt
+[gh-repo]: https://github.com/mvzcanhaco/hackatoon-1IADT-fiap
 
 ## Funcionalidades
 
