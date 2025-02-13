@@ -7,6 +7,7 @@ import os
 import cv2
 from PIL import Image
 import time
+import sys
 
 logger = logging.getLogger(__name__)
 

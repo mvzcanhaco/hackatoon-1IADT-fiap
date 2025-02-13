@@ -1,6 +1,6 @@
 # Interface e API
 
-## Interface Web (Gradio)
+## Interface Web
 
 ### Componentes Principais
 
@@ -64,7 +64,7 @@ Content-Type: multipart/form-data
                 {
                     "label": "arma",
                     "confidence": 95.5,
-                    "bbox": [x1, y1, x2, y2]
+                    "bbox": [0, 0, 100, 100]
                 }
             ]
         }

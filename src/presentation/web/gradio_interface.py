@@ -223,33 +223,17 @@ class GradioInterface:
                         """)
             # Vídeos de exemplo
             if sample_videos:
-                with gr.Group():
-                    gr.Markdown("### Vídeos de Exemplo")
-                    with gr.Row():
-                        with gr.Column(scale=3):
-                            gr.Markdown("#### Vídeo")
-                        with gr.Column(scale=1):
-                            gr.Markdown("#### Ação")
-                    
-                    for video in sample_videos:
-                        with gr.Row():
-                            with gr.Column(scale=3):                            
-                                gr.PlayableVideo(                                    
-                                    value=video['path'],
-                                    format="mp4",
-                                    height=150,
-                                    interactive=True,
-                                    show_label=True)
-                                
-                            with gr.Column(scale=1, min_width=100):
-                                gr.Button(
-                                    "📥 Carregar",
-                                    size="md"
-                                ).click(
-                                    fn=self.load_sample_video,
-                                    inputs=[gr.State(video['path'])],
-                                    outputs=[input_video]
-                                )
+                gr.Markdown("### Vídeos de Exemplo")
+                examples = [
+                    [video['path']] for video in sample_videos
+                ]
+                gr.Examples(
+                    examples=examples,
+                    inputs=input_video,
+                    outputs=input_video,
+                    fn=self.load_sample_video,
+                    label="Clique em um vídeo para carregá-lo"
+                )
             
             # Configurar callback do botão
             submit_btn.click(
