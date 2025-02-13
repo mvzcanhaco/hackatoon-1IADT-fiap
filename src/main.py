@@ -127,10 +127,10 @@ def main():
         if IS_HUGGINGFACE:
             # Configurar com base no tipo de GPU
             if gpu_type == "t4_dedicated":
-                max_concurrent = 2  # T4 pode lidar com mais requisições
+                max_concurrent = 3  # T4 pode lidar com mais requisições
                 queue_size = 10
             else:
-                max_concurrent = 1  # Zero-GPU precisa ser mais conservadora
+                max_concurrent = 2  # Zero-GPU precisa ser mais conservadora
                 queue_size = 5
             
             # Configurar fila
@@ -138,7 +138,7 @@ def main():
                 api_open=False,
                 max_size=queue_size,
                 status_update_rate="auto",
-                concurrency_count=max_concurrent
+                default_concurrency_limit=max_concurrent
             )
             
             # Launch
