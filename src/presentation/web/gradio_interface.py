@@ -239,16 +239,12 @@ class GradioInterface:
                                     format="mp4",
                                     height=150,
                                     interactive=True,
-                                    show_label=True).click(
-                                    fn=self.load_sample_video,
-                                    inputs=[gr.State(video['path'])],
-                                    outputs=[input_video]
-                                    )
+                                    show_label=True)
                                 
                             with gr.Column(scale=1, min_width=100):
                                 gr.Button(
                                     "📥 Carregar",
-                                    size="sm"
+                                    size="md"
                                 ).click(
                                     fn=self.load_sample_video,
                                     inputs=[gr.State(video['path'])],
