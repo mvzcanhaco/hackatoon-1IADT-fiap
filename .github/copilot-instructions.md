@@ -131,7 +131,8 @@ domain/ → application/ → infrastructure/ → main
 | Máx. linhas/função | 20 | 40 | 30 | 60 | 40 |
 | Máx. linhas/arquivo | 300 | 500 | 400 | 500 | 500 |
 | Type safety | mypy strict | interfaces | type system | stdint.h | const+[[nodiscard]] |
-| Linter | ruff+mypy | golangci-lint | ktlint+detekt | clang-tidy | clang-tidy |
+| Linter | ruff (E,F,I,B,UP,SIM,PERF)+mypy | golangci-lint | ktlint+detekt | clang-tidy | clang-tidy |
+| Env manager | uv | Go modules | Gradle | Make/CMake | CMake |
 
 ### 4. Testes sempre junto com o código
 

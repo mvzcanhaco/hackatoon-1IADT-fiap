@@ -195,6 +195,25 @@ Pare imediatamente e pergunte quando:
 
 ---
 
+## TÉCNICAS DE GROUNDING — Redução de Alucinação
+
+Este arquivo em si é um mecanismo de grounding estático: fornece contexto persistente que ancora as gerações às convenções reais do projeto. Quanto mais preciso for o contexto fornecido, menor a superfície de alucinação.
+
+Técnicas complementares em ordem de impacto:
+
+| Técnica | Mecanismo | Quando usar |
+|---------|-----------|-------------|
+| **`#file:` references** | Injeta código real no contexto antes da geração | Sempre — é o baseline deste framework |
+| **RAG (Retrieval-Augmented Generation)** | Busca documentos atualizados externos antes de gerar | APIs externas, docs em evolução |
+| **MCP (Model Context Protocol)** | Protocolo padronizado para conectar agentes a fontes externas (docs, DBs, APIs) | Projetos com múltiplas fontes de dados — evita integrações customizadas |
+| **Structured Outputs / JSON Schema** | Força formato de saída programaticamente via schema | Extração de dados, geração de código tipado |
+| **Temperature = 0** | Minimiza aleatoriedade quando precisão > criatividade | Geração determinística de código |
+| **Verificação em múltiplas camadas** | Governança de input + RAG + agente de verificação pós-resposta | Sistemas de alta criticidade em produção |
+
+> **MCP na prática**: um agente de coding pode puxar documentação de uma lib de um MCP server e dados de API live de outro — mesmo protocolo, mesmo agente, fontes diferentes. Veja [Model Context Protocol](https://modelcontextprotocol.io).
+
+---
+
 ## COMO USAR ESTE GUARDRAIL
 
 Inclua sempre junto com outros agentes/prompts:

@@ -4,6 +4,7 @@
 > - [PEP 8](https://peps.python.org/pep-0008/) — Style Guide for Python Code
 > - [PEP 257](https://peps.python.org/pep-0257/) — Docstring Conventions
 > - [PEP 484](https://peps.python.org/pep-0484/) / [526](https://peps.python.org/pep-0526/) / [604](https://peps.python.org/pep-0604/) — Type Hints
+> - [PEP 698](https://peps.python.org/pep-0698/) — `@override` decorator (3.12+)
 > - [PEP 20](https://peps.python.org/pep-0020/) — The Zen of Python
 > - [Python Docs 3.12](https://docs.python.org/3.12/)
 
@@ -221,6 +222,39 @@ match event:
         send_standard_alert(event)
     case _:
         pass
+
+# @override (PEP 698) — Python 3.12+
+# Obrigatório ao sobrescrever métodos de classe base — o type checker valida
+# que o método realmente existe na classe pai
+from typing import override
+
+class BaseDetector(ABC):
+    @abstractmethod
+    def detect(self, frame: VideoFrame) -> list[Detection]: ...
+
+class YoloDetector(BaseDetector):
+    @override
+    def detect(self, frame: VideoFrame) -> list[Detection]:  # mypy/pyright valida
+        ...
+```
+
+---
+
+## Gerenciamento de Ambiente — uv (2025+)
+
+`uv` é o gerenciador unificado moderno (substitui `pip`, `pipenv`, `pyenv`, `pipx`):
+
+```bash
+# Criar ambiente e instalar dependências
+uv venv && uv sync
+
+# Adicionar dependência (atualiza pyproject.toml automaticamente)
+uv add fastapi
+uv add --dev pytest ruff mypy
+
+# Executar ferramenta sem instalar globalmente
+uvx ruff check .
+uvx mypy src/
 ```
 
 ---
@@ -247,10 +281,12 @@ dev = ["pytest>=8.0", "pytest-cov", "ruff", "mypy"]
 
 [tool.ruff]
 line-length = 99
-target-version = "py311"
+target-version = "py312"  # atualize conforme requires-python do projeto
 
 [tool.ruff.lint]
-select = ["E", "W", "F", "I", "B", "C4", "UP"]  # UP = pyupgrade rules
+# E/W: pycodestyle | F: pyflakes | I: isort | B: flake8-bugbear
+# UP: pyupgrade | SIM: flake8-simplify | PERF: perflint | C4: flake8-comprehensions
+select = ["E", "W", "F", "I", "B", "C4", "UP", "SIM", "PERF"]
 ignore = ["E501"]  # line length handled by formatter
 
 [tool.mypy]
