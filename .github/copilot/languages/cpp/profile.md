@@ -53,9 +53,13 @@ public:
     }
 
     // Regra dos 5 — ou Rule of Zero (preferível)
+    // ⚠️ ARMADILHA: definir APENAS o destrutor desabilita silenciosamente o move!
+    // O compilador deleta move ctor/assign implicitamente se o destrutor for declarado.
+    // A classe cai de volta para cópia — perde performance SEM erro de compilação.
+    // Solução: declare TODOS os 5 membros especiais explicitamente.
     VideoCapture(const VideoCapture&) = delete;             // não copiável
     VideoCapture& operator=(const VideoCapture&) = delete;
-    VideoCapture(VideoCapture&&) noexcept = default;        // movível
+    VideoCapture(VideoCapture&&) noexcept = default;        // movível — DEVE ser declarado
     VideoCapture& operator=(VideoCapture&&) noexcept = default;
 
 private:
@@ -122,6 +126,14 @@ private:
     std::vector<Detection> detections_;
     std::unique_ptr<Metrics> metrics_;
 };
+
+// ⚠️ ARMADILHA — destrutor sem Regra dos 5 silencia perda de move semantics:
+// class Broken {
+//     ~Broken() { cleanup(); }      // declarar destrutor implicitamente...
+//     // ...deleta move ctor/assign → classe vira "só cópia" SEM aviso do compilador
+// };
+//
+// clang-tidy: cppcoreguidelines-rule-of-five detecta esta violação (C.21)
 ```
 
 ---

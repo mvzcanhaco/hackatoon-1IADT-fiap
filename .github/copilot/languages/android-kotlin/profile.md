@@ -268,6 +268,25 @@ fun observeDetections(): Flow<List<Detection>> =
         .retry(3) { e -> e is NetworkException }
         .distinctUntilChanged()
 
+// ✅ Loops longos — chamar ensureActive() para respeitar cancelamento
+suspend fun processFrames(frames: List<Frame>) {
+    for (frame in frames) {
+        ensureActive()  // cancela a coroutine se o scope foi cancelado
+        processFrame(frame)
+    }
+}
+
+// ✅ Coletar StateFlow na UI — parar quando app vai para background
+// NUNCA use lifecycleScope.launch { collect { } } diretamente — coleta no background!
+lifecycleScope.launch {
+    repeatOnLifecycle(Lifecycle.State.STARTED) {  // para ao ir para background
+        viewModel.uiState.collect { uiState ->
+            // atualiza UI
+        }
+    }
+}
+// Nota: collectAsStateWithLifecycle() em Compose já faz isso automaticamente.
+
 // ❌ Proibido: GlobalScope (sem lifecycle management)
 GlobalScope.launch { ... }  // NUNCA
 
@@ -387,11 +406,24 @@ class DetectionViewModelTest {
         viewModel.processVideo("/path/to/video.mp4")
         advanceUntilIdle()
 
-        // Assert
+        // Assert — assertar em StateFlow.value (não emissões intermediárias, pois é conflated)
         val state = viewModel.uiState.value
         assertThat(state.isLoading).isFalse()
         assertThat(state.detections).hasSize(1)
         assertThat(state.error).isNull()
+    }
+}
+
+// ✅ Testar emissões de Flow com Turbine (biblioteca app.cash.turbine)
+// StateFlow é conflated — collectors podem não ver valores intermediários.
+// Para testar sequências de emissões de Flow, use Turbine:
+@Test
+fun `observeAll emits updates on repository change`() = runTest {
+    repository.observeAll().test {  // turbine: test { } coleta todas emissões
+        assertThat(awaitItem()).isEmpty()
+        repository.emit(listOf(Detection(id = "1", label = "knife")))
+        assertThat(awaitItem()).hasSize(1)
+        cancelAndIgnoreRemainingEvents()
     }
 }
 ```

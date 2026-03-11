@@ -3,7 +3,8 @@
 > **Referências Canônicas**:
 > - [Effective Go](https://go.dev/doc/effective_go) — guia oficial de idiomas Go
 > - [Go Code Review Comments](https://github.com/golang/go/wiki/CodeReviewComments) — padrões de code review
-> - [Standard Project Layout](https://github.com/golang-standards/project-layout) — estrutura de projeto
+> - [Organizing a Go module](https://go.dev/doc/modules/layout) — **referência oficial** do Go team para layout de módulos
+> - [golang-standards/project-layout](https://github.com/golang-standards/project-layout) — layout popular da comunidade (**não é padrão oficial** do Go team)
 > - [Google Go Style Guide](https://google.github.io/styleguide/go/) — guia de estilo do Google
 > - [Uber Go Style Guide](https://github.com/uber-go/guide/blob/master/style.md)
 > - [Go Blog](https://go.dev/blog/) — artigos oficiais
@@ -30,7 +31,7 @@ go 1.22  // nunca use features de versão superior à declarada
 
 ## Estrutura de Projeto
 
-### Aplicação (Standard Layout — github.com/golang-standards/project-layout)
+### Aplicação (Layout Recomendado — go.dev/doc/modules/layout)
 
 ```
 meu-projeto/

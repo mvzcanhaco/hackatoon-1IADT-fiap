@@ -209,6 +209,17 @@ cleanup:
 /* ✅ Zerar ponteiro após free — evitar use-after-free */
 #define SAFE_FREE(ptr) do { free(ptr); (ptr) = NULL; } while (0)
 
+/* ✅ Alocação de arrays — evitar overflow de multiplicação */
+/* malloc(n * size) pode fazer overflow silencioso quando n é grande */
+/* ❌ Proibido: */
+uint8_t *buf = malloc(n * sizeof(uint8_t));  /* overflow se n > SIZE_MAX */
+
+/* ✅ Correto: calloc já protege contra overflow e zera a memória */
+uint8_t *buf = calloc(n, sizeof(uint8_t));
+
+/* ✅ Para realloc: use reallocarray (POSIX, Linux glibc >= 2.26) */
+uint8_t *new_buf = reallocarray(buf, n, sizeof(uint8_t));
+
 /* ✅ Tipos de largura fixa para dados com tamanho definido */
 uint8_t  byte_value;    /* 0 a 255 — não use unsigned char */
 int32_t  pixel_count;   /* -2^31 a 2^31-1 — não use int */
