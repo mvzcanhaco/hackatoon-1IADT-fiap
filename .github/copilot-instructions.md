@@ -1,124 +1,209 @@
 # GitHub Copilot — Instruções do Workspace
 
-Você é um assistente de desenvolvimento especializado neste workspace. Siga rigorosamente as convenções, padrões e arquitetura estabelecidos neste projeto.
+> **Versão**: 2.0 | **Protocolo**: GROUND-TRUTH ativo
 
 ---
 
-## Identidade do Projeto
+## PROTOCOLO GROUND-TRUTH — Anti-Alucinação
 
-- **Linguagem principal**: Identifique automaticamente pela extensão dos arquivos no workspace
-- **Arquitetura**: Hexagonal (Ports & Adapters) com princípios de Clean Architecture e DDD
-- **Princípios guia**: SOLID, DRY, KISS, YAGNI
+**REGRA ABSOLUTA N°1**: Você NUNCA inventa. Você ancora.
+
+Antes de gerar qualquer código:
+1. **Leia os arquivos relevantes** com `#file:` — nunca assuma conteúdo
+2. **Verifique a versão da linguagem/libs** nos arquivos de configuração
+3. **Declare explicitamente** o que você não sabe
+
+```
+FONTES DE VERDADE ACEITAS:
+  ✅ Código real do workspace (lido via #file:)
+  ✅ Especificação oficial da linguagem (docs canônicos)
+  ✅ Padrão reconhecido da comunidade (PEP, RFC, Core Guidelines)
+  ❌ Suposição sem fonte verificável
+  ❌ Memória sobre APIs sem confirmação no projeto
+```
+
+Referência completa: `#file:.github/copilot/guardrails/anti-hallucination.md`
+
+**Gatilhos de parada obrigatória** — pare e pergunte quando:
+- Não encontrou o arquivo referenciado
+- Há inconsistência entre arquivos existentes
+- A versão da lib pode não suportar a API sugerida
+- A mudança pode quebrar código não fornecido no contexto
 
 ---
 
-## Regras Fundamentais
+## Detecção Automática de Linguagem
 
-### 1. Sempre leia antes de escrever
-Antes de gerar qualquer código, inspecione os arquivos existentes para entender:
-- Convenções de nomenclatura usadas
-- Padrões de imports e dependências
-- Estilo de código dominante
-- Estrutura de diretórios
+Copilot identifica o perfil da linguagem pelos arquivos do workspace:
 
-### 2. Respeite a Arquitetura Hexagonal
+| Arquivos detectados | Perfil ativo |
+|---------------------|-------------|
+| `.py`, `pyproject.toml`, `requirements.txt` | → `#file:.github/copilot/languages/python/profile.md` |
+| `.go`, `go.mod`, `go.sum` | → `#file:.github/copilot/languages/go/profile.md` |
+| `AndroidManifest.xml`, `.kt`, `build.gradle` | → `#file:.github/copilot/languages/android-kotlin/profile.md` |
+| `.c`, `.h` (sem `.cpp`) | → `#file:.github/copilot/languages/c/profile.md` |
+| `.cpp`, `.cc`, `.hpp`, `CMakeLists.txt` c/ CXX | → `#file:.github/copilot/languages/cpp/profile.md` |
 
+**Sempre carregue o perfil da linguagem** antes de implementar código:
 ```
-src/
-├── domain/           ← Núcleo puro — ZERO dependências externas
-│   ├── entities/     ← Entidades de negócio
-│   ├── value_objects/← Objetos de valor imutáveis
-│   ├── interfaces/   ← Ports (contratos abstratos)
-│   ├── repositories/ ← Interfaces de repositório
-│   ├── services/     ← Serviços de domínio
-│   ├── factories/    ← Fábricas de domínio
-│   └── events/       ← Eventos de domínio
-├── application/      ← Orquestra casos de uso
-│   ├── use_cases/    ← Um arquivo por caso de uso
-│   ├── dto/          ← Objetos de transferência de dados
-│   └── interfaces/   ← Ports de aplicação
-├── infrastructure/   ← Adaptadores externos (DB, APIs, etc)
-│   ├── repositories/ ← Implementações concretas
-│   ├── services/     ← Serviços externos
-│   └── adapters/     ← Adaptadores de entrada/saída
-└── presentation/     ← Interface com o mundo (HTTP, CLI, etc)
-    ├── web/
-    ├── cli/
-    └── api/
+@workspace #file:.github/copilot/languages/[linguagem]/profile.md
+#file:.github/copilot/guardrails/anti-hallucination.md
+[sua pergunta]
 ```
 
-**Regra de dependência**: as setas de dependência apontam para dentro. `infrastructure` depende de `domain`, nunca o contrário.
+---
 
-### 3. Geração de Código
+## Arquitetura — Regra Universal
 
-- **Entidades**: Sem dependências de frameworks. Use classes simples ou dataclasses.
-- **Casos de uso**: Um único método `execute()`. Recebe DTO, retorna DTO.
-- **Interfaces (Ports)**: Sempre ABCs com `@abstractmethod`.
-- **Repositórios**: Interface no domínio, implementação na infra.
-- **Factories**: Encapsule criação de objetos complexos.
-- **Testes**: Sempre gere testes unitários junto com o código de domínio/aplicação.
+Independente da linguagem, a regra de dependências é sempre a mesma:
 
-### 4. Nomenclatura
+```
+┌──────────────┐     ┌──────────────┐     ┌──────────────┐     ┌──────────────┐
+│ Presentation │────▶│ Application  │────▶│   Domain     │◀────│Infrastructure│
+│  (UI/API)   │     │  (UseCases)  │     │  (Entities)  │     │ (DB/HTTP/...) │
+└──────────────┘     └──────────────┘     └──────────────┘     └──────────────┘
+    entrada              orquestra           regras puras          implementa ports
+```
 
-| Elemento          | Convenção                          | Exemplo                        |
-|-------------------|------------------------------------|--------------------------------|
-| Classes           | PascalCase                         | `DetectionService`             |
-| Funções/Métodos   | snake_case                         | `process_video()`              |
-| Interfaces        | Sufixo `Interface` ou `Port`       | `DetectorInterface`            |
-| Repositórios      | Sufixo `Repository`                | `DetectionRepository`          |
-| Use Cases         | Sufixo `UseCase`                   | `ProcessVideoUseCase`          |
-| DTOs              | Sufixo `Request`/`Response`        | `ProcessVideoRequest`          |
-| Factories         | Sufixo `Factory`                   | `DetectorFactory`              |
-| Events            | Sufixo `Event` (passado)           | `VideoProcessedEvent`          |
+**Regra de dependência**: setas apontam para dentro. Domínio não depende de ninguém.
 
-### 5. Qualidade de Código
+### Estrutura por Linguagem
 
-- Máximo 20 linhas por método — extraia se ultrapassar
-- Máximo 200 linhas por arquivo — divida se ultrapassar
-- Sem comentários óbvios — o código deve ser autodocumentado
-- Docstrings em classes e métodos públicos
-- Type hints em todos os parâmetros e retornos
+**Python** (`src/`):
+```
+domain/ → application/ → infrastructure/ → presentation/
+```
+
+**Go** (`internal/`):
+```
+domain/ → application/usecase/ → infrastructure/ → cmd/
+```
+
+**Android/Kotlin**:
+```
+domain/ → data/ → presentation/viewmodel/ → presentation/ui/
+```
+
+**C/C++** (`src/`):
+```
+domain/ → application/ → infrastructure/ → main
+```
+
+---
+
+## Convenções de Nomenclatura — Por Linguagem
+
+| Elemento | Python | Go | Kotlin | C | C++ |
+|----------|--------|----|--------|---|-----|
+| Classe/Tipo | `PascalCase` | `PascalCase` | `PascalCase` | `PascalCase` typedef | `PascalCase` |
+| Função/Método | `snake_case` | `camelCase` | `camelCase` | `mod_verb_noun` | `camelCase`* |
+| Variável | `snake_case` | `camelCase` | `camelCase` | `snake_case` | `trailing_` membro |
+| Constante | `UPPER_SNAKE` | `kPascalCase` | `UPPER_SNAKE` | `UPPER_SNAKE` | `kPascalCase` |
+| Interface | `*Port`/`*Interface` | `-er` sufixo | `*Interface` | typedef struct | classe abstrata |
+| Privado | `_prefixo` | unexported | `private` | `static` | `trailing_` |
+
+*C++: verifique o estilo adotado no projeto antes de escolher — respeite a convenção existente.
+
+---
+
+## Regras de Geração de Código
+
+### 1. Leia antes de escrever
+```
+❌ NUNCA assuma o conteúdo de um arquivo sem lê-lo
+✅ SEMPRE referencie com #file: arquivos que serão modificados
+✅ SEMPRE verifique dependências existentes antes de sugerir novas
+```
+
+### 2. Marcadores de confiança obrigatórios
+```
+[VERIFIED: arquivo:linha]   — verificado no workspace
+[STANDARD: PEP8/RFC/guide] — padrão oficial da linguagem
+[ASSUMPTION: motivo]        — suposição que precisa de validação humana
+[PLACEHOLDER]               — substituir pelo valor real do projeto
+[TODO: verify API version]  — verificar compatibilidade de versão
+```
+
+### 3. Limites de qualidade por linguagem
+
+| Métrica | Python | Go | Kotlin | C | C++ |
+|---------|--------|----|----|---|-----|
+| Máx. linhas/função | 20 | 40 | 30 | 60 | 40 |
+| Máx. linhas/arquivo | 300 | 500 | 400 | 500 | 500 |
+| Type safety | mypy strict | interfaces | type system | stdint.h | const+[[nodiscard]] |
+| Linter | ruff+mypy | golangci-lint | ktlint+detekt | clang-tidy | clang-tidy |
+
+### 4. Testes sempre junto com o código
+
+Para cada implementação entregue, inclua:
+- Unitários do comportamento de domínio
+- Mocks/stubs para dependências externas
+- Pelo menos 1 caso de erro/falha
 
 ---
 
 ## Fluxo de Trabalho com Copilot
 
-### Projeto Novo → Use: `.github/copilot/prompts/new-project/`
-1. `01-discovery-questions.md` — Perguntas de descoberta
-2. `02-domain-modeling.md` — Modelagem do domínio
-3. `03-architecture-design.md` — Design da arquitetura
-4. `04-project-bootstrap.md` — Bootstrap do projeto
+### Projeto Novo (qualquer linguagem)
+```
+1: #file:.github/copilot/prompts/new-project/01-discovery-questions.md
+2: #file:.github/copilot/prompts/new-project/02-domain-modeling.md
+3: #file:.github/copilot/prompts/new-project/03-architecture-design.md
+4: #file:.github/copilot/prompts/new-project/04-project-bootstrap.md
+```
 
-### Projeto Existente → Use: `.github/copilot/prompts/existing-project/`
-1. `01-context-capture.md` — Captura de contexto
-2. `02-analysis-report.md` — Relatório de análise
-3. `03-modernization-plan.md` — Plano de modernização
-4. `04-feature-addition.md` — Adição de features
+### Projeto Existente
+```
+1: #file:.github/copilot/prompts/existing-project/01-context-capture.md
+2: #file:.github/copilot/prompts/existing-project/02-analysis-report.md
+3: #file:.github/copilot/prompts/existing-project/03-modernization-plan.md
+4: #file:.github/copilot/prompts/existing-project/04-feature-addition.md
+```
 
-### Agentes Especializados → Use: `.github/copilot/agents/`
-- `01-project-discovery.md` — Descoberta e requisitos
-- `02-architect.md` — Design de arquitetura
-- `03-domain-modeler.md` — Modelagem de domínio
-- `04-developer.md` — Desenvolvimento
-- `05-code-reviewer.md` — Revisão de código
-- `06-test-engineer.md` — Engenharia de testes
-
-### Knowledge Base → Use: `.github/copilot/skills/`
-- `hexagonal-architecture.md`
-- `domain-driven-design.md`
-- `design-patterns.md`
-- `testing-pyramid.md`
+### Agentes Especializados
+| Tarefa | Agent |
+|--------|-------|
+| Levantamento de requisitos | `#file:.github/copilot/agents/01-project-discovery.md` |
+| Design arquitetural | `#file:.github/copilot/agents/02-architect.md` |
+| Modelagem de domínio | `#file:.github/copilot/agents/03-domain-modeler.md` |
+| Implementação | `#file:.github/copilot/agents/04-developer.md` |
+| Code review | `#file:.github/copilot/agents/05-code-reviewer.md` |
+| Geração de testes | `#file:.github/copilot/agents/06-test-engineer.md` |
 
 ---
 
 ## Respostas Esperadas
 
-Ao gerar código, sempre entregue:
-1. **O código solicitado** com type hints e docstrings
-2. **Testes unitários** correspondentes (pytest)
-3. **Observações de arquitetura** se houver trade-offs importantes
+### Ao gerar código:
+1. Código com marcadores de confiança (`[VERIFIED]`, `[ASSUMPTION]`)
+2. Testes correspondentes
+3. **Declaração de confiança** ao final:
+   ```
+   ✅ Alto: [partes verificadas em fontes concretas]
+   ⚠️ Médio: [baseadas em padrão, não verificadas no projeto]
+   ❌ Baixo: [especulativas — revisar antes de usar em produção]
+   ```
 
-Ao revisar código, sempre entregue:
-1. **Violações de arquitetura** encontradas
-2. **Sugestões de melhoria** com exemplos concretos
-3. **Code smells** identificados (God Class, Feature Envy, etc.)
+### Ao revisar código:
+1. Violações por severidade (🔴 Crítico → 🔵 Baixo)
+2. Código atual vs. código sugerido lado a lado
+3. Referência ao padrão violado (PEP, Core Guidelines, etc.)
+
+### Quando não souber:
+```
+"Não encontrei [X] nos arquivos fornecidos.
+Para responder com precisão, preciso de: #file:[caminho]
+O que posso afirmar com certeza: [apenas o que está documentado]"
+```
+
+---
+
+## Checklist Universal Pré-Entrega
+
+- [ ] Todos os imports existem no projeto (verificado no arquivo de dependências)
+- [ ] Tipos/assinaturas batem com definições reais (verificado via #file:)
+- [ ] Versão da linguagem suporta as features usadas (verificado no config)
+- [ ] Nenhuma lógica de negócio inventada sem especificação explícita
+- [ ] Partes incertas marcadas com [ASSUMPTION] ou [TODO: verify]
+- [ ] Testes cobrem happy path + pelo menos 1 caso de erro
+- [ ] Sem lógica de negócio fora da camada de domínio
