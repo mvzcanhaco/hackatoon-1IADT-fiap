@@ -4,12 +4,13 @@ Framework de desenvolvimento para GitHub Copilot com **Protocolo GROUND-TRUTH an
 
 ---
 
-## Novidades v2.1
+## Novidades v2.2
 
 - ✅ **Protocolo GROUND-TRUTH** — regras anti-alucinação com marcadores de confiança
-- ✅ **6 perfis de linguagem** — Python, Go, Android/Kotlin, C, C++, **TypeScript/Node.js**
-- ✅ **7 agentes especializados** — inclui novo **Agent 07: DevOps Engineer**
-- ✅ **Templates completos** — Domain Event, Port Interface e Exception Hierarchy adicionados
+- ✅ **9 perfis de linguagem** — Python, Go, Android/Kotlin, C, C++, TypeScript, **Java, Rust, PHP**
+- ✅ **9 agentes especializados** — inclui **Agent 08: Data Architect** e **Agent 09: Security Engineer**
+- ✅ **SDLC completo** — 6 fases (Inception → Design → Dev → Quality Gate → Release → Operate)
+- ✅ **Templates completos** — Domain Event, Port Interface, Exception Hierarchy
 - ✅ **Loop de revisão** — ciclo dev → review → fix → approve documentado no Agent 05
 - ✅ **Testes E2E** — templates de ponta a ponta no Agent 06
 - ✅ **Detecção automática** de linguagem pelo workspace
@@ -42,28 +43,27 @@ Este framework transforma o GitHub Copilot em um ecossistema completo de desenvo
     ├── guardrails/                      ← 🛡️ NOVO — Proteção contra alucinação
     │   └── anti-hallucination.md        ← Protocolo GROUND-TRUTH completo
     │
-    ├── languages/                       ← Perfis por linguagem (6 linguagens)
-    │   ├── python/
-    │   │   └── profile.md               ← PEP 8/484/257, pyproject.toml, pytest
-    │   ├── go/
-    │   │   └── profile.md               ← Effective Go, table tests, project layout
-    │   ├── android-kotlin/
-    │   │   └── profile.md               ← MAD, Compose, MVVM, Hilt, Coroutines
-    │   ├── c/
-    │   │   └── profile.md               ← MISRA C, NASA JPL, Power of Ten Rules
-    │   ├── cpp/
-    │   │   └── profile.md               ← C++ Core Guidelines, RAII, smart pointers
-    │   └── typescript/
-    │       └── profile.md               ← TypeScript 5.x, Node.js 20 LTS, Zod, Vitest
+    ├── languages/                       ← Perfis por linguagem (9 linguagens)
+    │   ├── python/profile.md            ← PEP 8/484/257, pyproject.toml, pytest
+    │   ├── go/profile.md                ← Effective Go, table tests, project layout
+    │   ├── android-kotlin/profile.md    ← MAD, Compose, MVVM, Hilt, Coroutines
+    │   ├── c/profile.md                 ← MISRA C, NASA JPL, Power of Ten Rules
+    │   ├── cpp/profile.md               ← C++ Core Guidelines, RAII, smart pointers
+    │   ├── typescript/profile.md        ← TypeScript 5.x, Node.js 20 LTS, Zod, Vitest
+    │   ├── java/profile.md              ← Java 21 LTS, Spring Boot 3.x, Records, Testcontainers
+    │   ├── rust/profile.md              ← Rust 2021, tokio, axum, sqlx, thiserror
+    │   └── php/profile.md               ← PHP 8.3, Laravel 11, Pest, readonly classes
     │
-    ├── agents/                          ← Personas especializadas (7 agentes)
+    ├── agents/                          ← Personas especializadas (9 agentes)
     │   ├── 01-project-discovery.md      ← Entrevista de requisitos (5 seções)
     │   ├── 02-architect.md              ← Design de arquitetura hexagonal
     │   ├── 03-domain-modeler.md         ← DDD: entidades, VOs, aggregates
     │   ├── 04-developer.md              ← Implementação inside-out (DTO vs Schema)
     │   ├── 05-code-reviewer.md          ← Review em 5 camadas + loop de feedback
     │   ├── 06-test-engineer.md          ← Pirâmide de testes + E2E templates
-    │   └── 07-devops.md                 ← CI/CD, Docker, observabilidade
+    │   ├── 07-devops.md                 ← CI/CD, Docker, observabilidade
+    │   ├── 08-data-architect.md         ← ERD, schema, migrations, N+1, outbox
+    │   └── 09-security-engineer.md      ← OWASP, STRIDE, LGPD, threat modeling
     │
     ├── skills/                          ← Knowledge base
     │   ├── hexagonal-architecture.md
@@ -82,6 +82,17 @@ Este framework transforma o GitHub Copilot em um ecossistema completo de desenvo
     │       ├── 02-analysis-report.md
     │       ├── 03-modernization-plan.md
     │       └── 04-feature-addition.md
+    │
+    ├── sdlc/                            ← Fluxo SDLC completo (6 fases)
+    │   ├── README.md                    ← Visão geral e como usar
+    │   ├── overview.md                  ← Diagrama completo com agentes e gates
+    │   └── phases/
+    │       ├── 01-inception.md          ← Discovery + DoR + Product Vision
+    │       ├── 02-design.md             ← Arquitetura + DDD + Schema
+    │       ├── 03-development.md        ← Inner loop inside-out + DoD
+    │       ├── 04-quality-gate.md       ← Code review + tests + security gate
+    │       ├── 05-release.md            ← Deploy + smoke tests + rollback
+    │       └── 06-operate.md            ← SLOs + alertas + runbooks + post-mortem
     │
     └── templates/
         ├── hexagonal/                   ← Templates de código por camada
@@ -211,6 +222,71 @@ Referências: TypeScript Handbook, Node.js Best Practices
 Stack: TypeScript 5.x + Node.js 20 LTS + Zod + Vitest
 Linter: ESLint (strict) + Prettier
 Config: tsconfig.json (strict mode) + package.json
+```
+
+### Java / Spring Boot
+```
+@workspace #file:.github/copilot/languages/java/profile.md
+Referências: Effective Java, Spring Boot Reference, Google Java Style
+Versão: Java 21 LTS + Spring Boot 3.x
+Padrões: Records, Sealed classes, pattern matching
+Testes: JUnit 5 + Mockito + Testcontainers + AssertJ
+```
+
+### Rust
+```
+@workspace #file:.github/copilot/languages/rust/profile.md
+Referências: The Rust Book, Rust API Guidelines
+Stack: Rust 2021 + tokio + axum + sqlx + thiserror
+Error handling: Result<T, E> com thiserror (libs) / anyhow (binários)
+Testes: cargo test + mockall + proptest
+```
+
+### PHP / Laravel
+```
+@workspace #file:.github/copilot/languages/php/profile.md
+Referências: PHP 8.3 Manual, Laravel 11 Docs, PHP-FIG PSR-12
+Stack: PHP 8.3 + Laravel 11 + Pest PHP
+Padrões: readonly classes, enums, strict_types
+DI: Laravel Service Container com ServiceProvider
+```
+
+---
+
+## Fluxo SDLC Completo
+
+Para conduzir um projeto do zero ao ar, use o SDLC estruturado:
+
+```bash
+# Visão geral do processo
+#file:.github/copilot/sdlc/README.md
+#file:.github/copilot/sdlc/overview.md
+
+# Fase 1 — Inception (Discovery + DoR)
+@workspace #file:.github/copilot/sdlc/phases/01-inception.md
+           #file:.github/copilot/agents/01-project-discovery.md
+
+# Fase 2 — Design (Arquitetura + DDD + Schema)
+@workspace #file:.github/copilot/sdlc/phases/02-design.md
+           #file:.github/copilot/agents/02-architect.md
+           #file:.github/copilot/agents/08-data-architect.md
+
+# Fase 3 — Development (inner loop inside-out)
+@workspace #file:.github/copilot/sdlc/phases/03-development.md
+           #file:.github/copilot/agents/04-developer.md
+           #file:.github/copilot/agents/09-security-engineer.md
+
+# Fase 4 — Quality Gate (review + testes + segurança)
+@workspace #file:.github/copilot/sdlc/phases/04-quality-gate.md
+           #file:.github/copilot/agents/05-code-reviewer.md
+           #file:.github/copilot/agents/06-test-engineer.md
+
+# Fase 5 — Release (deploy + smoke tests + rollback)
+@workspace #file:.github/copilot/sdlc/phases/05-release.md
+           #file:.github/copilot/agents/07-devops.md
+
+# Fase 6 — Operate (SLOs + alertas + runbooks + post-mortem)
+@workspace #file:.github/copilot/sdlc/phases/06-operate.md
 ```
 
 ---

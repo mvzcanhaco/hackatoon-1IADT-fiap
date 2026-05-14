@@ -44,6 +44,9 @@ Copilot identifica o perfil da linguagem pelos arquivos do workspace:
 | `.c`, `.h` (sem `.cpp`) | → `#file:.github/copilot/languages/c/profile.md` |
 | `.cpp`, `.cc`, `.hpp`, `CMakeLists.txt` c/ CXX | → `#file:.github/copilot/languages/cpp/profile.md` |
 | `tsconfig.json`, `.ts`, `package.json` c/ `typescript` | → `#file:.github/copilot/languages/typescript/profile.md` |
+| `pom.xml`, `build.gradle`, `.java` | → `#file:.github/copilot/languages/java/profile.md` |
+| `Cargo.toml`, `.rs` | → `#file:.github/copilot/languages/rust/profile.md` |
+| `composer.json`, `artisan`, `.php` | → `#file:.github/copilot/languages/php/profile.md` |
 
 **Sempre carregue o perfil da linguagem** antes de implementar código:
 ```
@@ -93,6 +96,21 @@ domain/ → application/ → infrastructure/ → main
 **TypeScript/Node.js** (`src/`):
 ```
 domain/ → application/use-cases/ → infrastructure/ → presentation/http/
+```
+
+**Java/Spring Boot** (`src/main/java/`):
+```
+domain/ → application/usecase/ → infrastructure/persistence/ → presentation/http/
+```
+
+**Rust** (`src/`):
+```
+domain/ → application/use_cases/ → infrastructure/ → presentation/http/
+```
+
+**PHP/Laravel** (`app/`):
+```
+Domain/ → Application/UseCases/ → Infrastructure/Persistence/ → Http/Controllers/
 ```
 
 ---
@@ -167,6 +185,19 @@ Para cada implementação entregue, inclua:
 4: #file:.github/copilot/prompts/existing-project/04-feature-addition.md
 ```
 
+### SDLC Completo (Discovery → Produção)
+```
+Visão geral:  #file:.github/copilot/sdlc/README.md
+Diagrama:     #file:.github/copilot/sdlc/overview.md
+
+Fase 1 — Inception:      #file:.github/copilot/sdlc/phases/01-inception.md
+Fase 2 — Design:         #file:.github/copilot/sdlc/phases/02-design.md
+Fase 3 — Development:    #file:.github/copilot/sdlc/phases/03-development.md
+Fase 4 — Quality Gate:   #file:.github/copilot/sdlc/phases/04-quality-gate.md
+Fase 5 — Release:        #file:.github/copilot/sdlc/phases/05-release.md
+Fase 6 — Operate:        #file:.github/copilot/sdlc/phases/06-operate.md
+```
+
 ### Agentes Especializados
 | Tarefa | Agent |
 |--------|-------|
@@ -177,6 +208,8 @@ Para cada implementação entregue, inclua:
 | Code review | `#file:.github/copilot/agents/05-code-reviewer.md` |
 | Geração de testes | `#file:.github/copilot/agents/06-test-engineer.md` |
 | CI/CD e infraestrutura | `#file:.github/copilot/agents/07-devops.md` |
+| Schema de banco + migrations | `#file:.github/copilot/agents/08-data-architect.md` |
+| Revisão de segurança + OWASP | `#file:.github/copilot/agents/09-security-engineer.md` |
 
 ---
 
