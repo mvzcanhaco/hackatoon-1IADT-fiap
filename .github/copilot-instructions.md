@@ -1,6 +1,6 @@
 # GitHub Copilot — Instruções do Workspace
 
-> **Versão**: 2.0 | **Protocolo**: GROUND-TRUTH ativo
+> **Versão**: 2.2 | **Protocolo**: GROUND-TRUTH ativo
 
 ---
 
@@ -175,6 +175,8 @@ Para cada implementação entregue, inclua:
 2: #file:.github/copilot/prompts/new-project/02-domain-modeling.md
 3: #file:.github/copilot/prompts/new-project/03-architecture-design.md
 4: #file:.github/copilot/prompts/new-project/04-project-bootstrap.md
+5: #file:.github/copilot/prompts/new-project/05-security-threat-model.md   ← STRIDE, OWASP, LGPD
+6: #file:.github/copilot/prompts/new-project/06-api-contract-design.md     ← Design-first OpenAPI
 ```
 
 ### Projeto Existente
@@ -183,6 +185,7 @@ Para cada implementação entregue, inclua:
 2: #file:.github/copilot/prompts/existing-project/02-analysis-report.md
 3: #file:.github/copilot/prompts/existing-project/03-modernization-plan.md
 4: #file:.github/copilot/prompts/existing-project/04-feature-addition.md
+5: #file:.github/copilot/prompts/existing-project/05-performance-audit.md  ← N+1, cache, índices
 ```
 
 ### SDLC Completo (Discovery → Produção)
@@ -210,6 +213,18 @@ Fase 6 — Operate:        #file:.github/copilot/sdlc/phases/06-operate.md
 | CI/CD e infraestrutura | `#file:.github/copilot/agents/07-devops.md` |
 | Schema de banco + migrations | `#file:.github/copilot/agents/08-data-architect.md` |
 | Revisão de segurança + OWASP | `#file:.github/copilot/agents/09-security-engineer.md` |
+
+### Skills — Knowledge Base
+| Tópico | Skill |
+|--------|-------|
+| Arquitetura hexagonal | `#file:.github/copilot/skills/hexagonal-architecture.md` |
+| Domain-Driven Design | `#file:.github/copilot/skills/domain-driven-design.md` |
+| Design Patterns (12) | `#file:.github/copilot/skills/design-patterns.md` |
+| Pirâmide de testes | `#file:.github/copilot/skills/testing-pyramid.md` |
+| Observabilidade (OTEL, Prometheus, Grafana) | `#file:.github/copilot/skills/observability.md` |
+| Design de APIs REST + OpenAPI | `#file:.github/copilot/skills/api-design.md` |
+| Event-Driven (Kafka, Outbox, Saga) | `#file:.github/copilot/skills/event-driven.md` |
+| Caching (Redis, Cache-Aside, Rate Limiting) | `#file:.github/copilot/skills/caching.md` |
 
 ---
 

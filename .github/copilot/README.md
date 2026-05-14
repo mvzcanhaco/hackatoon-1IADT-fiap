@@ -1,4 +1,4 @@
-# Copilot Dev Framework v2.0
+# Copilot Dev Framework v2.2
 
 Framework de desenvolvimento para GitHub Copilot com **Protocolo GROUND-TRUTH anti-alucinação**, arquitetura hexagonal, DDD, suporte multi-linguagem e boas práticas de engenharia de software.
 
@@ -10,11 +10,14 @@ Framework de desenvolvimento para GitHub Copilot com **Protocolo GROUND-TRUTH an
 - ✅ **9 perfis de linguagem** — Python, Go, Android/Kotlin, C, C++, TypeScript, **Java, Rust, PHP**
 - ✅ **9 agentes especializados** — inclui **Agent 08: Data Architect** e **Agent 09: Security Engineer**
 - ✅ **SDLC completo** — 6 fases (Inception → Design → Dev → Quality Gate → Release → Operate)
-- ✅ **Templates completos** — Domain Event, Port Interface, Exception Hierarchy
+- ✅ **4 Skills** — Observability, API Design, Event-Driven, Caching
+- ✅ **6 Templates** — Domain Event, Port Interface, Exceptions, **Aggregate Root, Query Handler, Event Publisher**
+- ✅ **6 Prompts** — 4 novos + **Security Threat Model, Performance Audit, API Contract Design**
 - ✅ **Loop de revisão** — ciclo dev → review → fix → approve documentado no Agent 05
 - ✅ **Testes E2E** — templates de ponta a ponta no Agent 06
 - ✅ **Detecção automática** de linguagem pelo workspace
 - ✅ **Guardrails** — padrão de resposta com declaração de confiança
+- ✅ **ROADMAP** — versões passadas e planejamento futuro
 
 ---
 
@@ -65,23 +68,30 @@ Este framework transforma o GitHub Copilot em um ecossistema completo de desenvo
     │   ├── 08-data-architect.md         ← ERD, schema, migrations, N+1, outbox
     │   └── 09-security-engineer.md      ← OWASP, STRIDE, LGPD, threat modeling
     │
-    ├── skills/                          ← Knowledge base
+    ├── skills/                          ← Knowledge base (8 skills)
     │   ├── hexagonal-architecture.md
     │   ├── domain-driven-design.md
     │   ├── design-patterns.md
-    │   └── testing-pyramid.md
+    │   ├── testing-pyramid.md
+    │   ├── observability.md             ← Logs, Métricas, Traces, OTEL, Prometheus
+    │   ├── api-design.md               ← REST, OpenAPI 3.1, RFC 7807, paginação
+    │   ├── event-driven.md             ← CloudEvents, Outbox, Saga, Kafka
+    │   └── caching.md                  ← Cache-Aside, TTL, Rate Limiting, Redis
     │
     ├── prompts/
     │   ├── new-project/                 ← Fluxo para projetos novos
     │   │   ├── 01-discovery-questions.md
     │   │   ├── 02-domain-modeling.md
     │   │   ├── 03-architecture-design.md
-    │   │   └── 04-project-bootstrap.md
+    │   │   ├── 04-project-bootstrap.md
+    │   │   ├── 05-security-threat-model.md  ← STRIDE, OWASP, LGPD
+    │   │   └── 06-api-contract-design.md    ← Design-first OpenAPI
     │   └── existing-project/            ← Fluxo para projetos existentes
     │       ├── 01-context-capture.md
     │       ├── 02-analysis-report.md
     │       ├── 03-modernization-plan.md
-    │       └── 04-feature-addition.md
+    │       ├── 04-feature-addition.md
+    │       └── 05-performance-audit.md  ← N+1, cache, índices, load test
     │
     ├── sdlc/                            ← Fluxo SDLC completo (6 fases)
     │   ├── README.md                    ← Visão geral e como usar
@@ -94,17 +104,22 @@ Este framework transforma o GitHub Copilot em um ecossistema completo de desenvo
     │       ├── 05-release.md            ← Deploy + smoke tests + rollback
     │       └── 06-operate.md            ← SLOs + alertas + runbooks + post-mortem
     │
-    └── templates/
-        ├── hexagonal/                   ← Templates de código por camada
-        │   ├── domain/entity.md
-        │   ├── domain/value-object.md
-        │   ├── domain/domain-event.md   ← NOVO — Domain Events imutáveis
-        │   ├── domain/port-interface.md ← NOVO — Ports primários e secundários
-        │   ├── domain/exceptions.md     ← NOVO — Hierarquia de exceções de domínio
-        │   ├── application/use-case.md
-        │   ├── infrastructure/repository.md
-        │   └── presentation/http-controller.md
-        └── patterns/catalog.md          ← 12 Design Patterns com templates
+    ├── templates/
+    │   ├── hexagonal/                   ← Templates de código por camada
+    │   │   ├── domain/entity.md
+    │   │   ├── domain/value-object.md
+    │   │   ├── domain/aggregate-root.md ← Invariantes, factory, reconstitute, pull_events
+    │   │   ├── domain/domain-event.md   ← Domain Events imutáveis
+    │   │   ├── domain/port-interface.md ← Ports primários e secundários
+    │   │   ├── domain/exceptions.md     ← Hierarquia de exceções de domínio
+    │   │   ├── application/use-case.md
+    │   │   ├── application/query-handler.md  ← CQRS read side, read model, paginação
+    │   │   ├── infrastructure/repository.md
+    │   │   ├── infrastructure/event-publisher.md  ← Kafka, Outbox, InMemory
+    │   │   └── presentation/http-controller.md
+    │   └── patterns/catalog.md          ← 12 Design Patterns com templates
+    │
+    └── ROADMAP.md                       ← Versões passadas e planejamento futuro
 ```
 
 ---
