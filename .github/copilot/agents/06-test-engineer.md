@@ -295,6 +295,128 @@ class Test[RepoImplementation]:
         assert result is None
 ```
 
+### E2E — Fluxo Completo (FastAPI + httpx)
+
+Testes E2E verificam o sistema de ponta a ponta: HTTP request → use case → banco → HTTP response.
+
+**Quando usar E2E em vez de integração**:
+- Fluxos críticos de negócio (criar pedido, processar pagamento)
+- Validação de contratos de API (status codes, schema da resposta)
+- Cenários que cruzam múltiplos contextos
+
+**Ferramentas**:
+- `httpx.AsyncClient` com `transport=ASGITransport(app)` — sem servidor real
+- `testcontainers-python` — banco real em container isolado (opcional)
+- `SQLite em memória` — para projetos sem requisitos de compatibilidade específica
+
+```python
+# tests/e2e/conftest.py
+import pytest
+from fastapi.testclient import TestClient
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+
+from src.main import create_app
+from src.infrastructure.config.database import Base, get_db_session
+
+TEST_DATABASE_URL = "sqlite:///:memory:"
+
+
+@pytest.fixture(scope="session")
+def engine():
+    engine = create_engine(TEST_DATABASE_URL, connect_args={"check_same_thread": False})
+    Base.metadata.create_all(engine)
+    yield engine
+    Base.metadata.drop_all(engine)
+
+
+@pytest.fixture(scope="function")
+def db_session(engine):
+    Session = sessionmaker(bind=engine)
+    session = Session()
+    yield session
+    session.rollback()
+    session.close()
+
+
+@pytest.fixture(scope="function")
+def client(db_session):
+    """Cliente HTTP do FastAPI com banco isolado por teste."""
+    app = create_app()
+
+    # Override da dependência de banco para usar banco de teste
+    app.dependency_overrides[get_db_session] = lambda: db_session
+
+    with TestClient(app) as client:
+        yield client
+```
+
+```python
+# tests/e2e/test_[feature]_flow.py
+import pytest
+from fastapi import status
+
+
+class Test[Feature]Flow:
+    """
+    Testes E2E para o fluxo de [Feature].
+
+    Cobre o caminho completo: HTTP → use case → domínio → banco → resposta.
+    Simula um cliente real da API.
+    """
+
+    def test_[happy_path_description](self, client) -> None:
+        """
+        Fluxo completo: [descreva o fluxo de ponta a ponta].
+        """
+        # Step 1: [Preparar dados necessários via API ou banco]
+        create_response = client.post(
+            "/[resource]",
+            json={"[campo]": "[valor]"},
+        )
+        assert create_response.status_code == status.HTTP_201_CREATED
+        resource_id = create_response.json()["id"]
+
+        # Step 2: [Executar ação principal]
+        action_response = client.post(f"/[resource]/{resource_id}/[action]")
+        assert action_response.status_code == status.HTTP_200_OK
+
+        # Step 3: [Verificar estado resultante]
+        get_response = client.get(f"/[resource]/{resource_id}")
+        assert get_response.status_code == status.HTTP_200_OK
+        assert get_response.json()["status"] == "[expected_status]"
+
+    def test_returns_404_when_[resource]_not_found(self, client) -> None:
+        """API deve retornar 404 para [resource] inexistente."""
+        response = client.get("/[resource]/nonexistent-id-00001")
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+        assert "not found" in response.json()["detail"].lower()
+
+    def test_returns_422_when_request_body_invalid(self, client) -> None:
+        """API deve retornar 422 para payload inválido."""
+        response = client.post("/[resource]", json={})  # campos obrigatórios ausentes
+        assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+
+    def test_returns_409_when_[resource]_already_exists(self, client) -> None:
+        """API deve retornar 409 ao tentar criar [resource] duplicado."""
+        payload = {"[campo_unico]": "[valor]"}
+        client.post("/[resource]", json=payload)  # primeira criação
+
+        response = client.post("/[resource]", json=payload)  # duplicata
+        assert response.status_code == status.HTTP_409_CONFLICT
+```
+
+**Critérios: quando escrever E2E vs Integração**:
+
+| Situação | Tipo de Teste |
+|----------|--------------|
+| Verificar que HTTP status code está correto | E2E |
+| Verificar schema JSON de resposta | E2E |
+| Verificar fluxo completo de negócio crítico | E2E |
+| Verificar mapeamento domínio ↔ banco | Integração |
+| Verificar query específica do repositório | Integração |
+| Verificar regra de negócio da entidade | Unitário |
+
 ---
 
 ## Cenários de Teste Obrigatórios

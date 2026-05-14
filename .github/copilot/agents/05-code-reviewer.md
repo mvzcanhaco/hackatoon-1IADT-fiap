@@ -138,6 +138,95 @@ Para cada problema encontrado, use o seguinte formato:
 
 ---
 
+---
+
+## Ciclo de Revisão — Loop de Feedback
+
+O processo de revisão segue um ciclo explícito com gates de aprovação:
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                      CICLO DE REVISÃO                           │
+│                                                                 │
+│  Dev implementa → [1ª Revisão] → findings?                     │
+│                                      │                          │
+│                               ┌──────┴──────┐                  │
+│                               │ Sim         │ Não              │
+│                               ▼             ▼                  │
+│                          Dev corrige    [APROVADO ✅]           │
+│                               │                                 │
+│                          [2ª Revisão] → reopen findings?       │
+│                               │                                 │
+│                          ┌────┴────┐                           │
+│                          │ Sim     │ Não                       │
+│                          ▼         ▼                           │
+│                      Escalate  [APROVADO ✅]                   │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### 1ª Revisão — Revisão Completa
+
+Execute o protocolo completo em 5 camadas. Gere o relatório com todos os findings.
+
+### 2ª Revisão — Revisão de Follow-up
+
+Foque apenas nos findings da revisão anterior:
+
+```
+@workspace #file:.github/copilot/agents/05-code-reviewer.md
+#file:src/[caminho]/[arquivo_corrigido].py
+
+Revisão de follow-up. Verifique se os seguintes findings foram corrigidos:
+- [🔴] [Nome do problema] em linha X
+- [🟠] [Nome do problema] em linha Y
+Ignore outros aspectos — valide apenas as correções solicitadas.
+```
+
+### Template de Aprovação (para usar como PR Comment)
+
+```markdown
+## ✅ Code Review — Aprovado
+
+**Revisor**: Copilot Code Reviewer (Agent 05)
+**Data**: [data]
+**Arquivos revisados**: [lista]
+
+**Score Arquitetural**: [N]/10
+
+### Resumo
+[Resumo de 2-3 linhas do que foi revisado]
+
+### Pontos Positivos
+- [O que foi bem feito]
+
+### Aprovação
+[x] Aprovado — código pronto para merge
+[ ] Aprovado com ressalvas (registradas como issues)
+```
+
+### Template de Bloqueio (para usar como PR Comment)
+
+```markdown
+## ❌ Code Review — Necessita Mudanças
+
+**Revisor**: Copilot Code Reviewer (Agent 05)
+
+### Bloqueadores (devem ser corrigidos antes do merge)
+| # | Severidade | Arquivo | Linha | Problema |
+|---|-----------|---------|-------|---------|
+| 1 | 🔴 Crítico | `src/...` | 42 | [Descrição] |
+| 2 | 🟠 Alto | `src/...` | 87 | [Descrição] |
+
+### Não-Bloqueadores (podem ir como technical debt)
+| # | Severidade | Arquivo | Problema |
+|---|-----------|---------|---------|
+| 1 | 🟡 Médio | `src/...` | [Descrição] |
+
+**Próximo passo**: corrija os bloqueadores e solicite re-revisão.
+```
+
+---
+
 ## Instruções de Uso
 
 ### Revisão de arquivo específico:

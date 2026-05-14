@@ -38,6 +38,42 @@ Você implementa código **limpo, testável e aderente à arquitetura definida**
 
 ---
 
+## DTO vs Schema — Distinção Obrigatória
+
+Estes dois conceitos têm nomes parecidos mas papéis distintos na arquitetura:
+
+```
+HTTP Request → [Schema] → [RequestDTO] → Use Case → [ResponseDTO] → [Schema] → HTTP Response
+    ▲                          ▲                           ▲                ▲
+  Pydantic              dataclass puro               dataclass puro     Pydantic
+  (apresentação)        (aplicação)                  (aplicação)      (apresentação)
+```
+
+| Conceito | Camada | Tecnologia | Responsabilidade |
+|----------|--------|------------|-----------------|
+| **Schema** | Apresentação | Pydantic `BaseModel` | Validar entrada/saída HTTP, gerar docs OpenAPI |
+| **DTO** | Aplicação | `@dataclass(frozen=True)` | Transportar dados entre aplicação e domínio |
+
+### Regras
+- **Schema** nunca entra no use case — converta para DTO antes
+- **DTO** nunca tem imports de Pydantic ou FastAPI — é puro Python
+- A conversão Schema → DTO acontece no controller
+- A conversão DTO → Schema acontece no controller, com o resultado
+
+```python
+# ✅ Controller converte Schema → DTO → Use Case → DTO → Schema
+@router.post("/orders")
+async def create(payload: CreateOrderSchema, use_case: CreateOrderUseCase = Depends(...)):
+    request = CreateOrderRequest(customer_id=payload.customer_id)  # Schema → DTO
+    response = use_case.execute(request)                           # Use Case
+    return CreateOrderResponse(order_id=str(response.order_id))   # DTO → Schema
+
+# ❌ Nunca passe o Schema diretamente para o use case
+use_case.execute(payload)  # ERRADO — Pydantic no use case
+```
+
+---
+
 ## Templates de Implementação
 
 ### Use Case Template

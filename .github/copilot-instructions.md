@@ -43,6 +43,7 @@ Copilot identifica o perfil da linguagem pelos arquivos do workspace:
 | `AndroidManifest.xml`, `.kt`, `build.gradle` | → `#file:.github/copilot/languages/android-kotlin/profile.md` |
 | `.c`, `.h` (sem `.cpp`) | → `#file:.github/copilot/languages/c/profile.md` |
 | `.cpp`, `.cc`, `.hpp`, `CMakeLists.txt` c/ CXX | → `#file:.github/copilot/languages/cpp/profile.md` |
+| `tsconfig.json`, `.ts`, `package.json` c/ `typescript` | → `#file:.github/copilot/languages/typescript/profile.md` |
 
 **Sempre carregue o perfil da linguagem** antes de implementar código:
 ```
@@ -89,18 +90,23 @@ domain/ → data/ → presentation/viewmodel/ → presentation/ui/
 domain/ → application/ → infrastructure/ → main
 ```
 
+**TypeScript/Node.js** (`src/`):
+```
+domain/ → application/use-cases/ → infrastructure/ → presentation/http/
+```
+
 ---
 
 ## Convenções de Nomenclatura — Por Linguagem
 
-| Elemento | Python | Go | Kotlin | C | C++ |
-|----------|--------|----|--------|---|-----|
-| Classe/Tipo | `PascalCase` | `PascalCase` | `PascalCase` | `PascalCase` typedef | `PascalCase` |
-| Função/Método | `snake_case` | `camelCase` | `camelCase` | `mod_verb_noun` | `camelCase`* |
-| Variável | `snake_case` | `camelCase` | `camelCase` | `snake_case` | `trailing_` membro |
-| Constante | `UPPER_SNAKE` | `kPascalCase` | `UPPER_SNAKE` | `UPPER_SNAKE` | `kPascalCase` |
-| Interface | `*Port`/`*Interface` | `-er` sufixo | `*Interface` | typedef struct | classe abstrata |
-| Privado | `_prefixo` | unexported | `private` | `static` | `trailing_` |
+| Elemento | Python | Go | Kotlin | C | C++ | TypeScript |
+|----------|--------|----|--------|---|-----|------------|
+| Classe/Tipo | `PascalCase` | `PascalCase` | `PascalCase` | `PascalCase` typedef | `PascalCase` | `PascalCase` |
+| Função/Método | `snake_case` | `camelCase` | `camelCase` | `mod_verb_noun` | `camelCase`* | `camelCase` |
+| Variável | `snake_case` | `camelCase` | `camelCase` | `snake_case` | `trailing_` membro | `camelCase` |
+| Constante | `UPPER_SNAKE` | `kPascalCase` | `UPPER_SNAKE` | `UPPER_SNAKE` | `kPascalCase` | `UPPER_SNAKE` |
+| Interface | `*Port`/`*Interface` | `-er` sufixo | `*Interface` | typedef struct | classe abstrata | `*Repository`/`*Gateway` |
+| Privado | `_prefixo` | unexported | `private` | `static` | `trailing_` | `private` keyword |
 
 *C++: verifique o estilo adotado no projeto antes de escolher — respeite a convenção existente.
 
@@ -126,13 +132,13 @@ domain/ → application/ → infrastructure/ → main
 
 ### 3. Limites de qualidade por linguagem
 
-| Métrica | Python | Go | Kotlin | C | C++ |
-|---------|--------|----|----|---|-----|
-| Máx. linhas/função | 20 | 40 | 30 | 60 | 40 |
-| Máx. linhas/arquivo | 300 | 500 | 400 | 500 | 500 |
-| Type safety | mypy strict | interfaces | type system | stdint.h | const+[[nodiscard]] |
-| Linter | ruff (E,F,I,B,UP,SIM,PERF)+mypy | golangci-lint | ktlint+detekt | clang-tidy | clang-tidy |
-| Env manager | uv | Go modules | Gradle | Make/CMake | CMake |
+| Métrica | Python | Go | Kotlin | C | C++ | TypeScript |
+|---------|--------|----|----|---|-----|------------|
+| Máx. linhas/função | 20 | 40 | 30 | 60 | 40 | 30 |
+| Máx. linhas/arquivo | 300 | 500 | 400 | 500 | 500 | 400 |
+| Type safety | mypy strict | interfaces | type system | stdint.h | const+[[nodiscard]] | strict mode + noUncheckedIndexedAccess |
+| Linter | ruff (E,F,I,B,UP,SIM,PERF)+mypy | golangci-lint | ktlint+detekt | clang-tidy | clang-tidy | ESLint+typescript-eslint strict |
+| Env manager | uv | Go modules | Gradle | Make/CMake | CMake | npm / pnpm |
 
 ### 4. Testes sempre junto com o código
 
@@ -170,6 +176,7 @@ Para cada implementação entregue, inclua:
 | Implementação | `#file:.github/copilot/agents/04-developer.md` |
 | Code review | `#file:.github/copilot/agents/05-code-reviewer.md` |
 | Geração de testes | `#file:.github/copilot/agents/06-test-engineer.md` |
+| CI/CD e infraestrutura | `#file:.github/copilot/agents/07-devops.md` |
 
 ---
 

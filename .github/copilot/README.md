@@ -4,10 +4,14 @@ Framework de desenvolvimento para GitHub Copilot com **Protocolo GROUND-TRUTH an
 
 ---
 
-## Novidades v2.0
+## Novidades v2.1
 
 - ✅ **Protocolo GROUND-TRUTH** — regras anti-alucinação com marcadores de confiança
-- ✅ **5 perfis de linguagem** — Python, Go, Android/Kotlin, C, C++
+- ✅ **6 perfis de linguagem** — Python, Go, Android/Kotlin, C, C++, **TypeScript/Node.js**
+- ✅ **7 agentes especializados** — inclui novo **Agent 07: DevOps Engineer**
+- ✅ **Templates completos** — Domain Event, Port Interface e Exception Hierarchy adicionados
+- ✅ **Loop de revisão** — ciclo dev → review → fix → approve documentado no Agent 05
+- ✅ **Testes E2E** — templates de ponta a ponta no Agent 06
 - ✅ **Detecção automática** de linguagem pelo workspace
 - ✅ **Guardrails** — padrão de resposta com declaração de confiança
 
@@ -38,7 +42,7 @@ Este framework transforma o GitHub Copilot em um ecossistema completo de desenvo
     ├── guardrails/                      ← 🛡️ NOVO — Proteção contra alucinação
     │   └── anti-hallucination.md        ← Protocolo GROUND-TRUTH completo
     │
-    ├── languages/                       ← 🆕 NOVO — Perfis por linguagem
+    ├── languages/                       ← Perfis por linguagem (6 linguagens)
     │   ├── python/
     │   │   └── profile.md               ← PEP 8/484/257, pyproject.toml, pytest
     │   ├── go/
@@ -47,16 +51,19 @@ Este framework transforma o GitHub Copilot em um ecossistema completo de desenvo
     │   │   └── profile.md               ← MAD, Compose, MVVM, Hilt, Coroutines
     │   ├── c/
     │   │   └── profile.md               ← MISRA C, NASA JPL, Power of Ten Rules
-    │   └── cpp/
-    │       └── profile.md               ← C++ Core Guidelines, RAII, smart pointers
+    │   ├── cpp/
+    │   │   └── profile.md               ← C++ Core Guidelines, RAII, smart pointers
+    │   └── typescript/
+    │       └── profile.md               ← TypeScript 5.x, Node.js 20 LTS, Zod, Vitest
     │
-    ├── agents/                          ← Personas especializadas
+    ├── agents/                          ← Personas especializadas (7 agentes)
     │   ├── 01-project-discovery.md      ← Entrevista de requisitos (5 seções)
     │   ├── 02-architect.md              ← Design de arquitetura hexagonal
     │   ├── 03-domain-modeler.md         ← DDD: entidades, VOs, aggregates
-    │   ├── 04-developer.md              ← Implementação inside-out
-    │   ├── 05-code-reviewer.md          ← Review em 5 camadas
-    │   └── 06-test-engineer.md          ← Pirâmide de testes
+    │   ├── 04-developer.md              ← Implementação inside-out (DTO vs Schema)
+    │   ├── 05-code-reviewer.md          ← Review em 5 camadas + loop de feedback
+    │   ├── 06-test-engineer.md          ← Pirâmide de testes + E2E templates
+    │   └── 07-devops.md                 ← CI/CD, Docker, observabilidade
     │
     ├── skills/                          ← Knowledge base
     │   ├── hexagonal-architecture.md
@@ -80,6 +87,9 @@ Este framework transforma o GitHub Copilot em um ecossistema completo de desenvo
         ├── hexagonal/                   ← Templates de código por camada
         │   ├── domain/entity.md
         │   ├── domain/value-object.md
+        │   ├── domain/domain-event.md   ← NOVO — Domain Events imutáveis
+        │   ├── domain/port-interface.md ← NOVO — Ports primários e secundários
+        │   ├── domain/exceptions.md     ← NOVO — Hierarquia de exceções de domínio
         │   ├── application/use-case.md
         │   ├── infrastructure/repository.md
         │   └── presentation/http-controller.md
@@ -194,6 +204,15 @@ Paradigma: RAII + smart pointers + Rule of Zero
 Linter: clang-tidy + Address Sanitizer
 ```
 
+### TypeScript / Node.js
+```
+@workspace #file:.github/copilot/languages/typescript/profile.md
+Referências: TypeScript Handbook, Node.js Best Practices
+Stack: TypeScript 5.x + Node.js 20 LTS + Zod + Vitest
+Linter: ESLint (strict) + Prettier
+Config: tsconfig.json (strict mode) + package.json
+```
+
 ---
 
 ## Protocolo Anti-Alucinação — GROUND-TRUTH
@@ -252,4 +271,10 @@ cp .editorconfig /seu-projeto/.editorconfig
 **Extensões VS Code recomendadas**:
 - `github.copilot` (obrigatório)
 - `github.copilot-chat` (obrigatório)
-- Linter da linguagem do seu projeto
+- `ms-python.python` + `ms-python.mypy-type-checker` + `charliermarsh.ruff` → Python
+- `golang.go` → Go
+- `dbaeumer.vscode-eslint` + `esbenp.prettier-vscode` → TypeScript/Node.js
+- `mathiasfrohlich.kotlin` + `android-studio` → Android/Kotlin
+- `llvm-vs-code-extensions.vscode-clangd` → C/C++
+- `ms-azuretools.vscode-docker` → Docker
+- `github.vscode-github-actions` → GitHub Actions
